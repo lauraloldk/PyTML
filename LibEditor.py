@@ -1,6 +1,7 @@
 """
 PyTML Lib Editor
 Scans the entire Python codebase and lets you add support for anything
+Uses gui_detector module for intelligent graphical package detection
 """
 
 import tkinter as tk
@@ -10,6 +11,12 @@ import sys
 import inspect
 import pkgutil
 import importlib
+
+# Import GUI detector
+from gui_detector import (
+    GUIDetector, GRAPHICAL_PACKAGES, GUI_ELEMENT_TYPES,
+    GRAPHICAL_PROPERTY_INDICATORS, is_graphical_module, is_graphical_class
+)
 
 
 # Datatype definitions for PyTML
@@ -272,6 +279,7 @@ class LibEditor:
         self.root.geometry("1200x800")
         
         self.scanner = PythonScanner()
+        self.gui_detector = GUIDetector()  # Use external GUI detector
         self.current_class = None
         self.selected_members = []
         
@@ -398,8 +406,232 @@ class LibEditor:
         prop_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.prop_tree.bind('<Double-1>', self._add_prop_to_pytml)
         
+        # GUI Editor Info tab - for graphical packages
+        gui_frame = ttk.Frame(self.members_notebook)
+        self.members_notebook.add(gui_frame, text="🎨 GUI Editor")
+        self._setup_gui_editor_tab(gui_frame)
+        
         ttk.Label(parent, text="💡 Double-click to add to PyTML | Right-click for type info", foreground='gray').pack()
     
+    def _setup_gui_editor_tab(self, parent):
+        """Setup the GUI Editor configuration tab"""
+        # Graphics detection info
+        info_frame = ttk.LabelFrame(parent, text="📊 Graphics Detection")
+        info_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.graphics_info_text = tk.Text(info_frame, height=4, bg='#1e1e1e', fg='#d4d4d4', 
+                                          font=('Consolas', 9))
+        self.graphics_info_text.pack(fill=tk.X, padx=5, pady=5)
+        self.graphics_info_text.insert('1.0', "Select a module to analyze graphical capabilities...")
+        self.graphics_info_text.config(state='disabled')
+        
+        # GUI Element Type selector
+        type_frame = ttk.LabelFrame(parent, text="🔧 GUI Element Configuration")
+        type_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Element type
+        row1 = ttk.Frame(type_frame)
+        row1.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(row1, text="Element Type:", width=15).pack(side=tk.LEFT)
+        self.gui_type_var = tk.StringVar(value='widget')
+        type_combo = ttk.Combobox(row1, textvariable=self.gui_type_var, 
+                                   values=['container', 'widget', 'graphic', 'surface', 'console'],
+                                   state='readonly', width=20)
+        type_combo.pack(side=tk.LEFT, padx=5)
+        type_combo.bind('<<ComboboxSelected>>', self._on_gui_type_change)
+        
+        self.gui_type_desc = ttk.Label(row1, text="", foreground='gray')
+        self.gui_type_desc.pack(side=tk.LEFT, padx=10)
+        
+        # Framework
+        row2 = ttk.Frame(type_frame)
+        row2.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(row2, text="Framework:", width=15).pack(side=tk.LEFT)
+        self.gui_framework_var = tk.StringVar(value='tkinter')
+        framework_combo = ttk.Combobox(row2, textvariable=self.gui_framework_var,
+                                        values=['tkinter', 'matplotlib', 'pygame', 'pillow', 
+                                                'turtle', 'canvas', 'opencv', 'opengl', 
+                                                'curses', 'rich', 'qt', 'kivy', 'custom'],
+                                        width=20)
+        framework_combo.pack(side=tk.LEFT, padx=5)
+        
+        # Display name
+        row3 = ttk.Frame(type_frame)
+        row3.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(row3, text="Display Name:", width=15).pack(side=tk.LEFT)
+        self.gui_display_name = ttk.Entry(row3, width=25)
+        self.gui_display_name.pack(side=tk.LEFT, padx=5)
+        self.gui_display_name.insert(0, "My Widget")
+        
+        # Icon
+        ttk.Label(row3, text="Icon:").pack(side=tk.LEFT, padx=(10, 5))
+        self.gui_icon_var = tk.StringVar(value='🔘')
+        icon_combo = ttk.Combobox(row3, textvariable=self.gui_icon_var,
+                                   values=['🪟', '📦', '🔘', '📝', '✏️', '🎨', '📊', '📈', 
+                                           '🖼️', '🎮', '👾', '🐢', '📷', '💻', '🎲', '🎬'],
+                                   width=5)
+        icon_combo.pack(side=tk.LEFT)
+        
+        # Default size
+        row4 = ttk.Frame(type_frame)
+        row4.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(row4, text="Default Size:", width=15).pack(side=tk.LEFT)
+        self.gui_width_var = tk.StringVar(value='100')
+        ttk.Entry(row4, textvariable=self.gui_width_var, width=8).pack(side=tk.LEFT)
+        ttk.Label(row4, text=" x ").pack(side=tk.LEFT)
+        self.gui_height_var = tk.StringVar(value='30')
+        ttk.Entry(row4, textvariable=self.gui_height_var, width=8).pack(side=tk.LEFT)
+        ttk.Label(row4, text=" pixels").pack(side=tk.LEFT, padx=5)
+        
+        # Embed method
+        row5 = ttk.Frame(type_frame)
+        row5.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(row5, text="Embed Method:", width=15).pack(side=tk.LEFT)
+        self.gui_embed_var = tk.StringVar(value='native')
+        embed_combo = ttk.Combobox(row5, textvariable=self.gui_embed_var,
+                                    values=['native', 'canvas', 'embed', 'webview', 'console', 'separate'],
+                                    state='readonly', width=20)
+        embed_combo.pack(side=tk.LEFT, padx=5)
+        
+        embed_help = ttk.Label(row5, text="", foreground='gray')
+        embed_help.pack(side=tk.LEFT, padx=5)
+        self.embed_help_label = embed_help
+        
+        # Display target
+        row6 = ttk.Frame(type_frame)
+        row6.pack(fill=tk.X, padx=5, pady=2)
+        ttk.Label(row6, text="Display:", width=15).pack(side=tk.LEFT)
+        self.gui_display_var = tk.StringVar(value='window')
+        display_combo = ttk.Combobox(row6, textvariable=self.gui_display_var,
+                                      values=['window', 'console', 'browser', 'separate'],
+                                      state='readonly', width=20)
+        display_combo.pack(side=tk.LEFT, padx=5)
+        
+        # Installed graphical packages info
+        packages_frame = ttk.LabelFrame(parent, text="📦 Installed Graphical Packages")
+        packages_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        self.packages_tree = ttk.Treeview(packages_frame, 
+                                           columns=('framework', 'type', 'description'),
+                                           show='tree headings', height=6)
+        self.packages_tree.heading('#0', text='Package')
+        self.packages_tree.heading('framework', text='Framework')
+        self.packages_tree.heading('type', text='Type')
+        self.packages_tree.heading('description', text='Description')
+        self.packages_tree.column('#0', width=100)
+        self.packages_tree.column('framework', width=80)
+        self.packages_tree.column('type', width=60)
+        self.packages_tree.column('description', width=200)
+        
+        pkg_scroll = ttk.Scrollbar(packages_frame, command=self.packages_tree.yview)
+        self.packages_tree.configure(yscrollcommand=pkg_scroll.set)
+        self.packages_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        pkg_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Load installed packages
+        self._load_installed_packages()
+        
+        # Update type description
+        self._on_gui_type_change()
+    
+    def _load_installed_packages(self):
+        """Load list of installed graphical packages using GUIDetector"""
+        self.packages_tree.delete(*self.packages_tree.get_children())
+        
+        installed = self.gui_detector.get_installed_graphical_packages()
+        for pkg in installed:
+            icon = pkg.get('icon', '📦')
+            self.packages_tree.insert('', tk.END, 
+                                      text=f"{icon} {pkg['name']}",
+                                      values=(pkg['framework'], pkg['type'], pkg['description']))
+    
+    def _on_gui_type_change(self, event=None):
+        """Update description when GUI type changes"""
+        gtype = self.gui_type_var.get()
+        type_info = GUI_ELEMENT_TYPES.get(gtype, {})
+        
+        icon = type_info.get('icon', '❓')
+        desc = type_info.get('description', '')
+        self.gui_type_desc.config(text=f"{icon} {desc}")
+        
+        # Auto-set embed method based on type
+        if gtype == 'container':
+            self.gui_embed_var.set('native')
+            self.gui_width_var.set('300')
+            self.gui_height_var.set('200')
+        elif gtype == 'widget':
+            self.gui_embed_var.set('native')
+            self.gui_width_var.set('100')
+            self.gui_height_var.set('30')
+        elif gtype == 'graphic':
+            self.gui_embed_var.set('canvas')
+            self.gui_width_var.set('400')
+            self.gui_height_var.set('300')
+        elif gtype == 'surface':
+            self.gui_embed_var.set('embed')
+            self.gui_width_var.set('640')
+            self.gui_height_var.set('480')
+        elif gtype == 'console':
+            self.gui_embed_var.set('console')
+            self.gui_display_var.set('console')
+    
+    def _update_graphics_detection(self, module_name, class_name=None):
+        """Update graphics detection info for current module/class using GUIDetector"""
+        # Use the new GUIDetector for analysis
+        if class_name and hasattr(self, 'classes_data') and class_name in self.classes_data:
+            cls = self.classes_data[class_name]
+            info = self.gui_detector.detect_class(cls)
+            # Also get module-level info for framework detection
+            module_info = self.gui_detector.quick_check(module_name)
+        else:
+            # Just module-level detection
+            module_info = self.gui_detector.detect_module(module_name)
+            info = {
+                'is_graphical': module_info.get('is_graphical_package', False) or module_info.get('total_graphical', 0) > 0,
+                'confidence': 1000 if module_info.get('is_graphical_package') else module_info.get('total_graphical', 0) * 100,
+                'element_type': module_info.get('package_info', {}).get('type', 'widget'),
+                'property_types_found': list(module_info.get('property_types_summary', {}).keys())
+            }
+            module_info = module_info.get('package_info', {})
+        
+        self.graphics_info_text.config(state='normal')
+        self.graphics_info_text.delete('1.0', tk.END)
+        
+        if info.get('is_graphical', False):
+            icon = module_info.get('icon', '🎨')
+            text = f"{icon} GRAPHICAL ELEMENT DETECTED\n"
+            text += f"Framework: {module_info.get('framework', 'unknown')}  |  "
+            text += f"Type: {info.get('element_type', 'unknown')}  |  "
+            text += f"Embed: {module_info.get('embed_method', 'native')}\n"
+            text += f"Confidence: {info.get('confidence', 0)}%  |  "
+            text += f"Display: {module_info.get('display', 'window')}\n"
+            
+            # Show property types detected
+            prop_types = info.get('property_types_found', [])
+            if prop_types:
+                text += f"Property Types: {', '.join(prop_types)}"
+            
+            self.graphics_info_text.insert('1.0', text)
+            
+            # Auto-fill GUI config
+            if info.get('element_type'):
+                self.gui_type_var.set(info['element_type'])
+            if module_info.get('framework'):
+                self.gui_framework_var.set(module_info['framework'])
+            if module_info.get('icon'):
+                self.gui_icon_var.set(module_info['icon'])
+            if module_info.get('embed_method'):
+                self.gui_embed_var.set(module_info['embed_method'])
+            if module_info.get('display'):
+                self.gui_display_var.set(module_info['display'])
+        else:
+            self.graphics_info_text.insert('1.0', "❓ Not detected as graphical\n")
+            self.graphics_info_text.insert(tk.END, "This module/class may not have visual elements,\n")
+            self.graphics_info_text.insert(tk.END, "or it uses an unknown graphics framework.\n\n")
+            self.graphics_info_text.insert(tk.END, "Hint: Elements with Color properties are usually graphical.")
+        
+        self.graphics_info_text.config(state='disabled')
+
     def _setup_selected(self, parent):
         """Panel with selected PyTML members"""
         ttk.Label(parent, text="PyTML Mapping", font=('Arial', 11, 'bold')).pack()
@@ -460,6 +692,7 @@ class LibEditor:
             return
         
         module_name = self.module_list.get(sel[0])
+        self.current_module_name = module_name  # Store for later use
         self.status_var.set(f"Scanning {module_name}...")
         self.root.update()
         
@@ -471,6 +704,9 @@ class LibEditor:
         
         self.classes_data = {name: cls for name, cls in classes}
         self.status_var.set(f"Found {len(classes)} classes in {module_name}")
+        
+        # Update graphics detection for this module
+        self._update_graphics_detection(module_name)
     
     def _on_class_select(self, event):
         sel = self.class_list.curselection()
@@ -514,6 +750,11 @@ class LibEditor:
         self.tag_name_entry.insert(0, class_name.lower())
         
         self.status_var.set(f"{class_name}: {len(members['config_options'])} config, {len(members['methods'])} methods")
+        
+        # Update graphics detection for this specific class
+        module_name = getattr(self, 'current_module_name', None)
+        if module_name:
+            self._update_graphics_detection(module_name, class_name)
     
     def _show_datatype_info(self, event):
         """Show datatype info on right-click"""
@@ -983,6 +1224,33 @@ class LibEditor:
         config_map = "\n".join([f"    '{c['pytml']}': '{c['python']}'," for c in configs])
         props_code = "\n".join([f"        '{c['pytml']}': PropertyDescriptor('{c['pytml']}', str, default='')," for c in configs])
         
+        # Get GUI info from the GUI Editor tab
+        gui_type = self.gui_type_var.get() if hasattr(self, 'gui_type_var') else 'widget'
+        gui_framework = self.gui_framework_var.get() if hasattr(self, 'gui_framework_var') else 'tkinter'
+        gui_icon = self.gui_icon_var.get() if hasattr(self, 'gui_icon_var') else '🔲'
+        gui_display = self.gui_display_var.get() if hasattr(self, 'gui_display_var') else class_name
+        gui_embed = self.gui_embed_var.get() if hasattr(self, 'gui_embed_var') else 'native'
+        gui_width = self.gui_width_var.get() if hasattr(self, 'gui_width_var') else '100'
+        gui_height = self.gui_height_var.get() if hasattr(self, 'gui_height_var') else '30'
+        
+        # Build the get_gui_info function
+        gui_info_code = f'''
+def get_gui_info():
+    """Return GUI metadata for the PyTML GUI Editor"""
+    return {{
+        'type': '{gui_type}',
+        'framework': '{gui_framework}',
+        'icon': '{gui_icon}',
+        'display_name': '{gui_display}',
+        'embed_method': '{gui_embed}',
+        'default_size': ({gui_width}, {gui_height}),
+        'is_graphical': True,
+        'properties': [
+{chr(10).join([f"            {{'name': '{c['pytml']}', 'type': 'str', 'default': ''}}," for c in configs])}
+        ]
+    }}
+'''
+        
         return f'''"""
 PyTML {class_name} Module - Auto-generated by LibEditor
 Based on: tkinter.{base_class}
@@ -1049,7 +1317,7 @@ def get_line_parsers():
         current.add_child({class_name}Node('{tag_name}', attrs))
         return None
     return [(r'<{tag_name}\\s+(.+)>$', parse_{tag_name})]
-'''
+{gui_info_code}'''
     
     def run(self):
         self.root.mainloop()
