@@ -1,7 +1,7 @@
 """
 PyTML Editor
-En simpel editor til at skrive og køre PyTML kode
-Med integrerede plugins: Objects, Properties og GUIEdit
+A simple editor for writing and running PyTML code
+With integrated plugins: Objects, Properties and GUIEdit
 """
 
 import tkinter as tk
@@ -9,7 +9,7 @@ from tkinter import ttk, scrolledtext, filedialog, messagebox
 import os
 import sys
 
-# Tilføj parent directory til path for imports
+# Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from Compiler import PyTMLCompiler, compile_pytml
@@ -21,7 +21,7 @@ from EditorBlocks import EditorBlockParser, EditorState
 
 
 class PyTMLEditor:
-    """GUI Editor til PyTML filer med plugins"""
+    """GUI Editor for PyTML files with plugins"""
     
     def __init__(self, root):
         self.root = root
@@ -37,13 +37,13 @@ class PyTMLEditor:
         self._setup_ui()
         self._setup_bindings()
         
-        # Load default file hvis den findes
+        # Load default file if it exists
         default_file = os.path.join(os.path.dirname(__file__), "Main.pytml")
         if os.path.exists(default_file):
             self.load_file(default_file)
     
     def _setup_menu(self):
-        """Opsæt menuen"""
+        """Setup the menu"""
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
         
@@ -72,8 +72,8 @@ class PyTMLEditor:
         view_menu.add_command(label="Show All References", command=self._show_references)
     
     def _setup_ui(self):
-        """Opsæt UI komponenter med plugins"""
-        # Main paned window (horisontalt)
+        """Setup UI components with plugins"""
+        # Main paned window (horizontal)
         self.main_paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         self.main_paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
@@ -107,7 +107,7 @@ class PyTMLEditor:
         # Editor label + mode indicator
         editor_header = ttk.Frame(editor_frame)
         editor_header.pack(fill=tk.X)
-        ttk.Label(editor_header, text="PyTML Kode:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT)
+        ttk.Label(editor_header, text="PyTML Code:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT)
         self.mode_label = ttk.Label(editor_header, text="[code mode]", foreground='#569cd6')
         self.mode_label.pack(side=tk.RIGHT, padx=5)
         
@@ -173,12 +173,12 @@ class PyTMLEditor:
         self.properties_panel.pack(fill=tk.BOTH, expand=True)
         
         # Variables panel
-        var_frame = ttk.LabelFrame(right_frame, text="📊 Variabler")
+        var_frame = ttk.LabelFrame(right_frame, text="📊 Variables")
         var_frame.pack(fill=tk.X, pady=(10, 0))
         
         self.var_tree = ttk.Treeview(var_frame, columns=('Value',), height=6)
-        self.var_tree.heading('#0', text='Navn')
-        self.var_tree.heading('Value', text='Værdi')
+        self.var_tree.heading('#0', text='Name')
+        self.var_tree.heading('Value', text='Value')
         self.var_tree.column('#0', width=100)
         self.var_tree.column('Value', width=150)
         self.var_tree.pack(fill=tk.X, pady=5, padx=5)
@@ -187,17 +187,17 @@ class PyTMLEditor:
         btn_frame = ttk.Frame(right_frame)
         btn_frame.pack(fill=tk.X, pady=5, padx=5)
         
-        ttk.Button(btn_frame, text="▶ Kør (F5)", command=self.run_code).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="▶ Run (F5)", command=self.run_code).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="⏭ Step (F10)", command=self.step_through).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="🗑 Ryd", command=self.clear_output).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="🗑 Clear", command=self.clear_output).pack(side=tk.LEFT, padx=2)
         
         # Status bar
-        self.status_var = tk.StringVar(value="Klar")
+        self.status_var = tk.StringVar(value="Ready")
         status_bar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN, anchor='w')
         status_bar.pack(fill=tk.X, side=tk.BOTTOM)
     
     def _setup_bindings(self):
-        """Opsæt keyboard bindings"""
+        """Setup keyboard bindings"""
         self.root.bind('<Control-n>', lambda e: self.new_file())
         self.root.bind('<Control-o>', lambda e: self.open_file())
         self.root.bind('<Control-s>', lambda e: self.save_file())
@@ -209,18 +209,18 @@ class PyTMLEditor:
         self.editor.bind('<KeyRelease>', self._on_editor_key)
     
     def _on_editor_click(self, event):
-        """Opdater properties når man klikker i editoren"""
+        """Update properties when clicking in the editor"""
         self._update_properties_from_cursor()
     
     def _on_editor_key(self, event):
-        """Opdater properties ved tastatur navigation"""
+        """Update properties on keyboard navigation"""
         if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return'):
             self._update_properties_from_cursor()
     
     def _update_properties_from_cursor(self):
-        """Opdater properties panel baseret på cursor position"""
+        """Update properties panel based on cursor position"""
         try:
-            # Hent current line
+            # Get current line
             line_idx = self.editor.index(tk.INSERT).split('.')[0]
             line = self.editor.get(f"{line_idx}.0", f"{line_idx}.end")
             
@@ -233,81 +233,81 @@ class PyTMLEditor:
             pass
     
     def _insert_from_objects(self, syntax):
-        """Callback fra Objects panel - indsæt syntax i editor"""
+        """Callback from Objects panel - insert syntax in editor"""
         self.editor.insert(tk.INSERT, syntax + "\n")
         self.editor.see(tk.INSERT)
-        self.status_var.set(f"Indsat: {syntax[:30]}...")
+        self.status_var.set(f"Inserted: {syntax[:30]}...")
     
     def _insert_from_references(self, syntax):
-        """Callback fra References panel - indsæt syntax i editor"""
-        # Skift til Code tab og indsæt
+        """Callback from References panel - insert syntax in editor"""
+        # Switch to Code tab and insert
         self.mode_notebook.select(0)
         self.editor.insert(tk.INSERT, syntax + "\n")
         self.editor.see(tk.INSERT)
-        self.status_var.set(f"Reference indsat: {syntax[:30]}...")
+        self.status_var.set(f"Reference inserted: {syntax[:30]}...")
     
     def _on_property_change(self, element, prop):
-        """Callback når en property ændres"""
+        """Callback when a property changes"""
         if element:
-            # Generer ny PyTML kode
+            # Generate new PyTML code
             new_code = element.to_pytml()
             
-            # Erstat current line
+            # Replace current line
             line_idx = self.editor.index(tk.INSERT).split('.')[0]
             self.editor.delete(f"{line_idx}.0", f"{line_idx}.end")
             self.editor.insert(f"{line_idx}.0", new_code.strip())
             
-            self.status_var.set(f"Property opdateret: {prop.name}")
+            self.status_var.set(f"Property updated: {prop.name}")
     
     def _on_gui_code_change(self, code, realtime=False):
-        """Callback fra GUI editor når kode ændres"""
+        """Callback from GUI editor when code changes"""
         if code == "__REFRESH__":
-            # Refresh GUI preview fra nuværende kode
+            # Refresh GUI preview from current code
             current_code = self.editor.get('1.0', tk.END)
             self.gui_editor.load_from_code(current_code)
-            self.status_var.set("GUI preview opdateret fra kode")
+            self.status_var.set("GUI preview updated from code")
         elif realtime:
-            # Realtime synkronisering - erstat hele koden
+            # Realtime synchronization - replace all code
             cursor_pos = self.editor.index(tk.INSERT)
             self.editor.delete('1.0', tk.END)
             self.editor.insert('1.0', code)
-            # Forsøg at bevare cursor position
+            # Try to preserve cursor position
             try:
                 self.editor.mark_set(tk.INSERT, cursor_pos)
                 self.editor.see(tk.INSERT)
             except:
                 pass
-            self.status_var.set("🔄 GUI synkroniseret")
+            self.status_var.set("🔄 GUI synchronized")
         else:
-            # Legacy: Indsæt kode (bruges ikke længere)
+            # Legacy: Insert code (no longer used)
             self.editor.insert(tk.END, "\n" + code)
             self.mode_notebook.select(0)
-            self.status_var.set("GUI kode genereret og indsat")
+            self.status_var.set("GUI code generated and inserted")
     
     def _toggle_objects_panel(self):
-        """Vis/skjul Objects panel"""
+        """Show/hide Objects panel"""
         if self.objects_frame.winfo_viewable():
             self.main_paned.forget(self.objects_frame)
         else:
             self.main_paned.insert(0, self.objects_frame, weight=1)
     
     def _toggle_properties_panel(self):
-        """Vis/skjul Properties panel"""
+        """Show/hide Properties panel"""
         if self.properties_frame.winfo_viewable():
             self.properties_frame.pack_forget()
         else:
             self.properties_frame.pack(fill=tk.BOTH, expand=True)
     
     def _toggle_gui_editor(self):
-        """Skift til GUI editor tab"""
+        """Switch to GUI editor tab"""
         self.mode_notebook.select(1)
     
     def _show_references(self):
-        """Skift til References tab"""
+        """Switch to References tab"""
         self.mode_notebook.select(2)
     
     def _on_tab_change(self, event):
-        """Håndter tab skift"""
+        """Handle tab switch"""
         current_tab = self.mode_notebook.index(self.mode_notebook.select())
         if current_tab == 1:  # GUI Editor tab
             # Load current code into GUI preview
@@ -315,14 +315,14 @@ class PyTMLEditor:
             self.gui_editor.load_from_code(current_code)
     
     def new_file(self):
-        """Opret ny fil"""
+        """Create new file"""
         self.editor.delete('1.0', tk.END)
         self.current_file = None
-        self.root.title("PyTML Editor - Ny fil")
-        self.status_var.set("Ny fil oprettet")
+        self.root.title("PyTML Editor - New file")
+        self.status_var.set("New file created")
     
     def open_file(self):
-        """Åbn fil dialog"""
+        """Open file dialog"""
         filepath = filedialog.askopenfilename(
             defaultextension=".pytml",
             filetypes=[("PyTML files", "*.pytml"), ("All files", "*.*")]
@@ -331,7 +331,7 @@ class PyTMLEditor:
             self.load_file(filepath)
     
     def load_file(self, filepath):
-        """Load en fil"""
+        """Load a file"""
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -341,17 +341,17 @@ class PyTMLEditor:
             self.root.title(f"PyTML Editor - {os.path.basename(filepath)}")
             self.status_var.set(f"Loaded: {filepath}")
         except Exception as e:
-            messagebox.showerror("Fejl", f"Kunne ikke åbne fil: {e}")
+            messagebox.showerror("Error", f"Could not open file: {e}")
     
     def save_file(self):
-        """Gem fil"""
+        """Save file"""
         if self.current_file:
             self._save_to_file(self.current_file)
         else:
             self.save_file_as()
     
     def save_file_as(self):
-        """Gem fil som..."""
+        """Save file as..."""
         filepath = filedialog.asksaveasfilename(
             defaultextension=".pytml",
             filetypes=[("PyTML files", "*.pytml"), ("All files", "*.*")]
@@ -362,35 +362,35 @@ class PyTMLEditor:
             self.root.title(f"PyTML Editor - {os.path.basename(filepath)}")
     
     def _save_to_file(self, filepath):
-        """Gem indhold til fil"""
+        """Save content to file"""
         try:
             content = self.editor.get('1.0', tk.END)
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(content)
-            self.status_var.set(f"Gemt: {filepath}")
+            self.status_var.set(f"Saved: {filepath}")
         except Exception as e:
-            messagebox.showerror("Fejl", f"Kunne ikke gemme fil: {e}")
+            messagebox.showerror("Error", f"Could not save file: {e}")
     
     def run_code(self):
-        """Kør PyTML koden i en separat process"""
+        """Run PyTML code in a separate process"""
         code = self.editor.get('1.0', tk.END)
         self.clear_output()
         
-        # Gem koden til en midlertidig fil og kør i separat process
+        # Save code to a temporary file and run in separate process
         import tempfile
         import subprocess
         import os
         
         try:
-            # Opret midlertidig fil
+            # Create temporary file
             with tempfile.NamedTemporaryFile(mode='w', suffix='.pytml', delete=False, encoding='utf-8') as f:
                 f.write(code)
                 temp_file = f.name
             
-            # Kør i separat process
+            # Run in separate process
             script_dir = os.path.dirname(os.path.abspath(__file__))
             
-            # Opret et runner script
+            # Create a runner script
             runner_script = os.path.join(script_dir, '_temp_runner.py')
             with open(runner_script, 'w', encoding='utf-8') as f:
                 f.write(f'''import sys
@@ -401,38 +401,38 @@ with open(r"{temp_file}", "r", encoding="utf-8") as f:
 try:
     compile_pytml(code, gui_mode=False)
 except Exception as e:
-    print(f"FEJL: {{e}}")
+    print(f"ERROR: {{e}}")
     import traceback
     traceback.print_exc()
 ''')
             
-            # Start subprocess UDEN pipes (så GUI virker)
+            # Start subprocess WITHOUT pipes (so GUI works)
             process = subprocess.Popen(
                 [sys.executable, runner_script],
                 cwd=script_dir,
                 creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0
             )
             
-            # Vis info
+            # Show info
             self.output.config(state='normal')
-            self.output.insert(tk.END, "=== PyTML kører i nyt vindue ===\n")
+            self.output.insert(tk.END, "=== PyTML running in new window ===\n")
             self.output.insert(tk.END, f"Process ID: {process.pid}\n")
             self.output.config(state='disabled')
             
-            self.status_var.set("Kører i separat konsol...")
+            self.status_var.set("Running in separate console...")
             
-            # Cleanup temp filer efter process er færdig
+            # Cleanup temp files after process is done
             def cleanup():
                 try:
-                    if process.poll() is not None:  # Process er færdig
+                    if process.poll() is not None:  # Process is done
                         try:
                             os.unlink(temp_file)
                             os.unlink(runner_script)
                         except:
                             pass
-                        self.status_var.set("Kørsel færdig")
+                        self.status_var.set("Execution finished")
                     else:
-                        # Tjek igen om 1000ms
+                        # Check again in 1000ms
                         self.root.after(1000, cleanup)
                 except:
                     pass
@@ -441,33 +441,33 @@ except Exception as e:
             
         except Exception as e:
             self.output.config(state='normal')
-            self.output.insert(tk.END, f"FEJL: {e}\n")
+            self.output.insert(tk.END, f"ERROR: {e}\n")
             self.output.config(state='disabled')
-            self.status_var.set(f"Fejl: {e}")
+            self.status_var.set(f"Error: {e}")
     
     def step_through(self):
-        """Step through koden linje for linje"""
-        # TODO: Implementer step-by-step execution
-        messagebox.showinfo("Step Through", "Step-through mode kommer snart!\nBrug Object Browser til at se action tree.")
-        self.status_var.set("Step through - ikke implementeret endnu")
+        """Step through the code line by line"""
+        # TODO: Implement step-by-step execution
+        messagebox.showinfo("Step Through", "Step-through mode coming soon!\nUse Object Browser to see action tree.")
+        self.status_var.set("Step through - not implemented yet")
     
     def clear_output(self):
-        """Ryd output"""
+        """Clear output"""
         self.output.config(state='normal')
         self.output.delete('1.0', tk.END)
         self.output.config(state='disabled')
         
-        # Ryd variable tree
+        # Clear variable tree
         for item in self.var_tree.get_children():
             self.var_tree.delete(item)
     
     def update_var_tree(self, variable_store):
-        """Opdater variabel tree med aktuelle variabler"""
-        # Ryd først
+        """Update variable tree with current variables"""
+        # Clear first
         for item in self.var_tree.get_children():
             self.var_tree.delete(item)
         
-        # Tilføj variabler
+        # Add variables
         for name, var in variable_store.variables.items():
             self.var_tree.insert('', tk.END, text=name, values=(var.value,))
 

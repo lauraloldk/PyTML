@@ -1,6 +1,6 @@
 """
 PyTML Lib Editor
-Scanner hele Python kodebasen og lader dig tilføje support for hvad som helst
+Scans the entire Python codebase and lets you add support for anything
 """
 
 import tkinter as tk
@@ -12,30 +12,30 @@ import pkgutil
 import importlib
 
 
-# Datatype definitioner for PyTML
+# Datatype definitions for PyTML
 PYTML_DATATYPES = {
-    'Color': {'icon': '🎨', 'description': 'Farve (hex, navn eller RGB)', 'examples': ['red', '#FF0000', 'rgb(255,0,0)']},
-    'Text': {'icon': '📝', 'description': 'Tekst streng', 'examples': ['Hello', 'Button text']},
-    'Number': {'icon': '🔢', 'description': 'Heltal eller decimal', 'examples': ['10', '3.14', '100']},
-    'Bool': {'icon': '✓', 'description': 'Sand/Falsk', 'examples': ['true', 'false', '1', '0']},
-    'Font': {'icon': '🔤', 'description': 'Skrifttype', 'examples': ['Arial', 'Helvetica 12 bold']},
-    'Image': {'icon': '🖼️', 'description': 'Billede fil', 'examples': ['icon.png', 'photo.gif']},
-    'File': {'icon': '📁', 'description': 'Fil sti', 'examples': ['data.txt', 'config.json']},
+    'Color': {'icon': '🎨', 'description': 'Color (hex, name or RGB)', 'examples': ['red', '#FF0000', 'rgb(255,0,0)']},
+    'Text': {'icon': '📝', 'description': 'Text string', 'examples': ['Hello', 'Button text']},
+    'Number': {'icon': '🔢', 'description': 'Integer or decimal', 'examples': ['10', '3.14', '100']},
+    'Bool': {'icon': '✓', 'description': 'True/False', 'examples': ['true', 'false', '1', '0']},
+    'Font': {'icon': '🔤', 'description': 'Font family', 'examples': ['Arial', 'Helvetica 12 bold']},
+    'Image': {'icon': '🖼️', 'description': 'Image file', 'examples': ['icon.png', 'photo.gif']},
+    'File': {'icon': '📁', 'description': 'File path', 'examples': ['data.txt', 'config.json']},
     'Cursor': {'icon': '👆', 'description': 'Cursor type', 'examples': ['hand2', 'arrow', 'crosshair']},
-    'Anchor': {'icon': '⚓', 'description': 'Position anker', 'examples': ['n', 'se', 'center', 'nw']},
-    'Relief': {'icon': '🔲', 'description': 'Kant stil', 'examples': ['flat', 'raised', 'sunken', 'groove']},
-    'Justify': {'icon': '📐', 'description': 'Tekst justering', 'examples': ['left', 'center', 'right']},
-    'State': {'icon': '⚡', 'description': 'Widget tilstand', 'examples': ['normal', 'disabled', 'active']},
-    'Pixels': {'icon': '📏', 'description': 'Pixel størrelse', 'examples': ['10', '100', '5p']},
-    'Time': {'icon': '⏱️', 'description': 'Tid i millisekunder', 'examples': ['100', '1000', '500']},
-    'Callback': {'icon': '📞', 'description': 'Funktion/event', 'examples': ['on_click', 'handler']},
-    'List': {'icon': '📋', 'description': 'Liste af værdier', 'examples': ['[1,2,3]', 'a,b,c']},
-    'Unknown': {'icon': '❓', 'description': 'Ukendt type', 'examples': []},
+    'Anchor': {'icon': '⚓', 'description': 'Position anchor', 'examples': ['n', 'se', 'center', 'nw']},
+    'Relief': {'icon': '🔲', 'description': 'Border style', 'examples': ['flat', 'raised', 'sunken', 'groove']},
+    'Justify': {'icon': '📐', 'description': 'Text alignment', 'examples': ['left', 'center', 'right']},
+    'State': {'icon': '⚡', 'description': 'Widget state', 'examples': ['normal', 'disabled', 'active']},
+    'Pixels': {'icon': '📏', 'description': 'Pixel size', 'examples': ['10', '100', '5p']},
+    'Time': {'icon': '⏱️', 'description': 'Time in milliseconds', 'examples': ['100', '1000', '500']},
+    'Callback': {'icon': '📞', 'description': 'Function/event', 'examples': ['on_click', 'handler']},
+    'List': {'icon': '📋', 'description': 'List of values', 'examples': ['[1,2,3]', 'a,b,c']},
+    'Unknown': {'icon': '❓', 'description': 'Unknown type', 'examples': []},
 }
 
-# Mapping fra tkinter option navne til datatyper
+# Mapping from tkinter option names to datatypes
 OPTION_TYPE_MAP = {
-    # Farver
+    # Colors
     'background': 'Color', 'bg': 'Color', 'foreground': 'Color', 'fg': 'Color',
     'activebackground': 'Color', 'activeforeground': 'Color',
     'disabledforeground': 'Color', 'disabledbackground': 'Color',
@@ -44,11 +44,11 @@ OPTION_TYPE_MAP = {
     'selectforeground': 'Color', 'troughcolor': 'Color',
     'readonlybackground': 'Color', 'selectcolor': 'Color',
     
-    # Tekst
+    # Text
     'text': 'Text', 'label': 'Text', 'title': 'Text', 'textvariable': 'Text',
     'placeholder': 'Text', 'show': 'Text',
     
-    # Tal
+    # Numbers
     'width': 'Pixels', 'height': 'Pixels', 'borderwidth': 'Pixels', 'bd': 'Pixels',
     'padx': 'Pixels', 'pady': 'Pixels', 'highlightthickness': 'Pixels',
     'insertwidth': 'Pixels', 'selectborderwidth': 'Pixels', 'wraplength': 'Pixels',
@@ -57,7 +57,7 @@ OPTION_TYPE_MAP = {
     # Font
     'font': 'Font',
     
-    # Billeder
+    # Images
     'image': 'Image', 'bitmap': 'Image', 'selectimage': 'Image',
     
     # Cursor
@@ -67,7 +67,7 @@ OPTION_TYPE_MAP = {
     'anchor': 'Anchor', 'justify': 'Justify', 'compound': 'Anchor',
     'sticky': 'Anchor',
     
-    # Relief/Stil
+    # Relief/Style
     'relief': 'Relief',
     
     # State
@@ -87,12 +87,12 @@ OPTION_TYPE_MAP = {
 
 
 def guess_datatype(option_name, current_value=''):
-    """Gæt datatype baseret på option navn og værdi"""
-    # Først tjek known mappings
+    """Guess datatype based on option name and value"""
+    # First check known mappings
     if option_name in OPTION_TYPE_MAP:
         return OPTION_TYPE_MAP[option_name]
     
-    # Gæt baseret på navn
+    # Guess based on name
     name_lower = option_name.lower()
     
     if any(c in name_lower for c in ['color', 'colour', 'background', 'foreground', 'bg', 'fg']):
@@ -122,7 +122,7 @@ def guess_datatype(option_name, current_value=''):
     if any(r in name_lower for r in ['relief', 'style', 'border']):
         return 'Relief'
     
-    # Gæt baseret på værdi
+    # Guess based on value
     if current_value:
         val = str(current_value).lower()
         if val in ['true', 'false', '0', '1', 'yes', 'no']:
@@ -136,14 +136,14 @@ def guess_datatype(option_name, current_value=''):
 
 
 class PythonScanner:
-    """Scanner hele Python kodebasen"""
+    """Scans the entire Python codebase"""
     
     def __init__(self):
         self.modules_cache = {}
         self.classes_cache = {}
     
     def get_all_modules(self):
-        """Hent liste over alle installerede modules"""
+        """Get list of all installed modules"""
         modules = []
         
         # Standard library
@@ -152,7 +152,7 @@ class PythonScanner:
                   'urllib', 'email', 'html', 'xml', 'sqlite3', 'csv']
         modules.extend(stdlib)
         
-        # Alle installerede packages
+        # All installed packages
         for importer, modname, ispkg in pkgutil.iter_modules():
             if not modname.startswith('_'):
                 modules.append(modname)
@@ -160,7 +160,7 @@ class PythonScanner:
         return sorted(set(modules))
     
     def get_module_classes(self, module_name):
-        """Hent alle klasser fra et modul"""
+        """Get all classes from a module"""
         try:
             if module_name in self.modules_cache:
                 return self.modules_cache[module_name]
@@ -174,7 +174,7 @@ class PythonScanner:
                     if inspect.isclass(obj):
                         classes.append((name, obj))
             
-            # Tjek også submodules
+            # Also check submodules
             if hasattr(module, '__path__'):
                 for importer, subname, ispkg in pkgutil.iter_modules(module.__path__):
                     if not subname.startswith('_'):
@@ -194,14 +194,14 @@ class PythonScanner:
             return []
     
     def get_class_members(self, cls):
-        """Hent alle properties og metoder fra en klasse"""
+        """Get all properties and methods from a class"""
         members = {
             'properties': [],
             'methods': [],
-            'config_options': [],  # Specielt for tkinter
+            'config_options': [],  # Special for tkinter
         }
         
-        # Hent metoder og properties
+        # Get methods and properties
         for name in dir(cls):
             if name.startswith('_'):
                 continue
@@ -235,7 +235,7 @@ class PythonScanner:
             except:
                 pass
         
-        # Specielt for tkinter: hent config options
+        # Special for tkinter: get config options
         if hasattr(cls, 'configure') or hasattr(cls, 'config'):
             try:
                 root = tk.Tk()
@@ -278,16 +278,16 @@ class LibEditor:
         self._setup_ui()
     
     def _setup_ui(self):
-        """Opsæt hovedvindue"""
-        # Status bar først så andre metoder kan bruge den
-        self.status_var = tk.StringVar(value="Klar - vælg et modul for at scanne")
+        """Setup main window"""
+        # Status bar first so other methods can use it
+        self.status_var = tk.StringVar(value="Ready - select a module to scan")
         
         toolbar = ttk.Frame(self.root)
         toolbar.pack(fill=tk.X, padx=5, pady=5)
         
         ttk.Label(toolbar, text="PyTML Lib Editor", font=('Arial', 14, 'bold')).pack(side=tk.LEFT)
-        ttk.Button(toolbar, text="Gem Lib", command=self._save_lib).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(toolbar, text="Rediger Eksisterende", command=self._edit_existing).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(toolbar, text="Save Lib", command=self._save_lib).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(toolbar, text="Edit Existing", command=self._edit_existing).pack(side=tk.RIGHT, padx=5)
         
         paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -307,12 +307,12 @@ class LibEditor:
         ttk.Label(self.root, textvariable=self.status_var).pack(fill=tk.X, padx=5, pady=2)
     
     def _setup_browser(self, parent):
-        """Modul og klasse browser"""
+        """Module and class browser"""
         ttk.Label(parent, text="Python Modules", font=('Arial', 11, 'bold')).pack()
         
         search_frame = ttk.Frame(parent)
         search_frame.pack(fill=tk.X, padx=2, pady=2)
-        ttk.Label(search_frame, text="Søg:").pack(side=tk.LEFT)
+        ttk.Label(search_frame, text="Search:").pack(side=tk.LEFT)
         self.module_search = ttk.Entry(search_frame)
         self.module_search.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.module_search.bind('<KeyRelease>', self._filter_modules)
@@ -344,8 +344,8 @@ class LibEditor:
         self._load_modules()
     
     def _setup_members(self, parent):
-        """Vis alle medlemmer af valgt klasse"""
-        ttk.Label(parent, text="Klasse Medlemmer", font=('Arial', 11, 'bold')).pack()
+        """Show all members of selected class"""
+        ttk.Label(parent, text="Class Members", font=('Arial', 11, 'bold')).pack()
         
         self.members_notebook = ttk.Notebook(parent)
         self.members_notebook.pack(fill=tk.BOTH, expand=True, pady=5)
@@ -358,7 +358,7 @@ class LibEditor:
         self.config_tree.heading('#0', text='Option')
         self.config_tree.heading('datatype', text='Type')
         self.config_tree.heading('value', text='Default')
-        self.config_tree.heading('pytml_name', text='PyTML Navn')
+        self.config_tree.heading('pytml_name', text='PyTML Name')
         self.config_tree.column('#0', width=150)
         self.config_tree.column('datatype', width=80)
         self.config_tree.column('value', width=120)
@@ -368,7 +368,7 @@ class LibEditor:
         self.config_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         config_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.config_tree.bind('<Double-1>', self._add_config_to_pytml)
-        self.config_tree.bind('<Button-3>', self._show_datatype_info)  # Højreklik for info
+        self.config_tree.bind('<Button-3>', self._show_datatype_info)  # Right-click for info
         
         # Methods tab
         method_frame = ttk.Frame(self.members_notebook)
@@ -377,7 +377,7 @@ class LibEditor:
         self.method_tree = ttk.Treeview(method_frame, columns=('signature', 'pytml_name'), show='tree headings')
         self.method_tree.heading('#0', text='Method')
         self.method_tree.heading('signature', text='Signature')
-        self.method_tree.heading('pytml_name', text='PyTML Navn')
+        self.method_tree.heading('pytml_name', text='PyTML Name')
         method_scroll = ttk.Scrollbar(method_frame, command=self.method_tree.yview)
         self.method_tree.configure(yscrollcommand=method_scroll.set)
         self.method_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -391,17 +391,17 @@ class LibEditor:
         self.prop_tree = ttk.Treeview(prop_frame, columns=('type', 'pytml_name'), show='tree headings')
         self.prop_tree.heading('#0', text='Property')
         self.prop_tree.heading('type', text='Type')
-        self.prop_tree.heading('pytml_name', text='PyTML Navn')
+        self.prop_tree.heading('pytml_name', text='PyTML Name')
         prop_scroll = ttk.Scrollbar(prop_frame, command=self.prop_tree.yview)
         self.prop_tree.configure(yscrollcommand=prop_scroll.set)
         self.prop_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         prop_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.prop_tree.bind('<Double-1>', self._add_prop_to_pytml)
         
-        ttk.Label(parent, text="💡 Dobbeltklik for at tilføje til PyTML | Højreklik for type info", foreground='gray').pack()
+        ttk.Label(parent, text="💡 Double-click to add to PyTML | Right-click for type info", foreground='gray').pack()
     
     def _setup_selected(self, parent):
-        """Panel med valgte PyTML members"""
+        """Panel with selected PyTML members"""
         ttk.Label(parent, text="PyTML Mapping", font=('Arial', 11, 'bold')).pack()
         
         name_frame = ttk.Frame(parent)
@@ -411,13 +411,13 @@ class LibEditor:
         self.tag_name_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         self.tag_name_entry.insert(0, "mytag")
         
-        ttk.Label(parent, text="Valgte Properties/Metoder:").pack(anchor=tk.W)
+        ttk.Label(parent, text="Selected Properties/Methods:").pack(anchor=tk.W)
         
         sel_frame = ttk.Frame(parent)
         sel_frame.pack(fill=tk.BOTH, expand=True)
         
         self.selected_tree = ttk.Treeview(sel_frame, columns=('python', 'datatype', 'kind'), show='tree headings')
-        self.selected_tree.heading('#0', text='PyTML Navn')
+        self.selected_tree.heading('#0', text='PyTML Name')
         self.selected_tree.heading('python', text='Python')
         self.selected_tree.heading('datatype', text='DataType')
         self.selected_tree.heading('kind', text='Kind')
@@ -432,8 +432,8 @@ class LibEditor:
         
         btn_frame = ttk.Frame(parent)
         btn_frame.pack(fill=tk.X, pady=5)
-        ttk.Button(btn_frame, text="Fjern", command=self._remove_selected).pack(side=tk.LEFT)
-        ttk.Button(btn_frame, text="Ryd alle", command=self._clear_selected).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Remove", command=self._remove_selected).pack(side=tk.LEFT)
+        ttk.Button(btn_frame, text="Clear all", command=self._clear_selected).pack(side=tk.LEFT, padx=5)
         
         ttk.Label(parent, text="Preview:").pack(anchor=tk.W, pady=(10,0))
         self.preview_text = tk.Text(parent, height=10, bg='#f5f5f5')
@@ -442,7 +442,7 @@ class LibEditor:
     def _load_modules(self):
         self.all_modules = self.scanner.get_all_modules()
         self._update_module_list(self.all_modules)
-        self.status_var.set(f"Fundet {len(self.all_modules)} modules")
+        self.status_var.set(f"Found {len(self.all_modules)} modules")
     
     def _update_module_list(self, modules):
         self.module_list.delete(0, tk.END)
@@ -460,7 +460,7 @@ class LibEditor:
             return
         
         module_name = self.module_list.get(sel[0])
-        self.status_var.set(f"Scanner {module_name}...")
+        self.status_var.set(f"Scanning {module_name}...")
         self.root.update()
         
         classes = self.scanner.get_module_classes(module_name)
@@ -470,7 +470,7 @@ class LibEditor:
             self.class_list.insert(tk.END, name)
         
         self.classes_data = {name: cls for name, cls in classes}
-        self.status_var.set(f"Fundet {len(classes)} klasser i {module_name}")
+        self.status_var.set(f"Found {len(classes)} classes in {module_name}")
     
     def _on_class_select(self, event):
         sel = self.class_list.curselection()
@@ -485,12 +485,12 @@ class LibEditor:
         self.current_class = cls
         self.current_class_name = class_name
         
-        self.status_var.set(f"Scanner {class_name}...")
+        self.status_var.set(f"Scanning {class_name}...")
         self.root.update()
         
         members = self.scanner.get_class_members(cls)
         
-        # Gem config data for senere brug
+        # Store config data for later use
         self.config_data = {}
         
         self.config_tree.delete(*self.config_tree.get_children())
@@ -513,10 +513,10 @@ class LibEditor:
         self.tag_name_entry.delete(0, tk.END)
         self.tag_name_entry.insert(0, class_name.lower())
         
-        self.status_var.set(f"{class_name}: {len(members['config_options'])} config, {len(members['methods'])} metoder")
+        self.status_var.set(f"{class_name}: {len(members['config_options'])} config, {len(members['methods'])} methods")
     
     def _show_datatype_info(self, event):
-        """Vis info om datatype ved højreklik"""
+        """Show datatype info on right-click"""
         item = self.config_tree.identify_row(event.y)
         if not item:
             return
@@ -526,14 +526,14 @@ class LibEditor:
         datatype = opt.get('datatype', 'Unknown')
         type_info = PYTML_DATATYPES.get(datatype, PYTML_DATATYPES['Unknown'])
         
-        # Opret popup menu
+        # Create popup menu
         menu = tk.Menu(self.root, tearoff=0)
         menu.add_command(label=f"{type_info['icon']} {datatype}", state='disabled')
         menu.add_separator()
         menu.add_command(label=type_info['description'], state='disabled')
         if type_info['examples']:
             menu.add_separator()
-            menu.add_command(label="Eksempler:", state='disabled')
+            menu.add_command(label="Examples:", state='disabled')
             for ex in type_info['examples'][:3]:
                 menu.add_command(label=f"  • {ex}", state='disabled')
         
@@ -548,8 +548,8 @@ class LibEditor:
         opt = self.config_data.get(python_name, {})
         datatype = opt.get('datatype', 'Unknown')
         
-        pytml_name = simpledialog.askstring("PyTML Navn", 
-            f"Angiv PyTML navn for '{python_name}' ({datatype}):", initialvalue=python_name)
+        pytml_name = simpledialog.askstring("PyTML Name", 
+            f"Enter PyTML name for '{python_name}' ({datatype}):", initialvalue=python_name)
         
         if pytml_name:
             self._add_to_selected(pytml_name, python_name, 'config', datatype)
@@ -561,8 +561,8 @@ class LibEditor:
             return
         
         python_name = self.method_tree.item(item[0], 'text')
-        pytml_name = simpledialog.askstring("PyTML Navn",
-            f"Angiv PyTML navn for '{python_name}':", initialvalue=python_name)
+        pytml_name = simpledialog.askstring("PyTML Name",
+            f"Enter PyTML name for '{python_name}':", initialvalue=python_name)
         
         if pytml_name:
             self._add_to_selected(pytml_name, python_name, 'method', 'Callback')
@@ -574,8 +574,8 @@ class LibEditor:
             return
         
         python_name = self.prop_tree.item(item[0], 'text')
-        pytml_name = simpledialog.askstring("PyTML Navn",
-            f"Angiv PyTML navn for '{python_name}':", initialvalue=python_name)
+        pytml_name = simpledialog.askstring("PyTML Name",
+            f"Enter PyTML name for '{python_name}':", initialvalue=python_name)
         
         if pytml_name:
             self._add_to_selected(pytml_name, python_name, 'property', 'Unknown')
@@ -616,9 +616,9 @@ class LibEditor:
         configs = [m for m in self.selected_members if m['type'] == 'config']
         methods = [m for m in self.selected_members if m['type'] == 'method']
         
-        preview = f"<!-- Opret {tag} -->\n<{tag} name=\"{tag}1\""
+        preview = f"<!-- Create {tag} -->\n<{tag} name=\"{tag}1\""
         for c in configs[:3]:
-            # Vis eksempel baseret på datatype
+            # Show example based on datatype
             datatype = c.get('datatype', 'Unknown')
             examples = PYTML_DATATYPES.get(datatype, {}).get('examples', ['...'])
             example = examples[0] if examples else '...'
@@ -626,11 +626,11 @@ class LibEditor:
         preview += ">\n\n<!-- Actions -->\n"
         for m in methods[:3]:
             preview += f"<{tag}1_{m['pytml']}>\n"
-        preview += f"\n<!-- Sæt property -->\n"
+        preview += f"\n<!-- Set property -->\n"
         for c in configs[:2]:
             datatype = c.get('datatype', 'Unknown')
-            examples = PYTML_DATATYPES.get(datatype, {}).get('examples', ['værdi'])
-            example = examples[0] if examples else 'værdi'
+            examples = PYTML_DATATYPES.get(datatype, {}).get('examples', ['value'])
+            example = examples[0] if examples else 'value'
             preview += f'<{tag}1_{c["pytml"]}="{example}">\n'
         
         self.preview_text.delete('1.0', tk.END)
@@ -639,14 +639,14 @@ class LibEditor:
     def _edit_existing(self):
         libs_dir = os.path.join(os.path.dirname(__file__), 'libs')
         dialog = tk.Toplevel(self.root)
-        dialog.title("Vælg Lib at Redigere")
+        dialog.title("Select Lib to Edit")
         dialog.geometry("400x500")
         dialog.transient(self.root)
         dialog.grab_set()
         
-        ttk.Label(dialog, text="Eksisterende Libs:", font=('Arial', 11, 'bold')).pack(pady=5)
+        ttk.Label(dialog, text="Existing Libs:", font=('Arial', 11, 'bold')).pack(pady=5)
         
-        # Liste over libs
+        # List of libs
         list_frame = ttk.Frame(dialog)
         list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
@@ -681,12 +681,12 @@ class LibEditor:
             
             info_text.delete('1.0', tk.END)
             info_text.insert(tk.END, f"Lib: {lib_name}\n")
-            info_text.insert(tk.END, f"Base class: {info.get('base_class', 'ukendt')}\n")
-            info_text.insert(tk.END, f"\nEksisterende properties ({len(info.get('properties', []))}):\n")
+            info_text.insert(tk.END, f"Base class: {info.get('base_class', 'unknown')}\n")
+            info_text.insert(tk.END, f"\nExisting properties ({len(info.get('properties', []))}):\n")
             for prop in info.get('properties', [])[:10]:
                 info_text.insert(tk.END, f"  • {prop}\n")
             if len(info.get('properties', [])) > 10:
-                info_text.insert(tk.END, f"  ... og {len(info.get('properties', [])) - 10} mere\n")
+                info_text.insert(tk.END, f"  ... and {len(info.get('properties', [])) - 10} more\n")
         
         lib_list.bind('<<ListboxSelect>>', on_select)
         
@@ -699,11 +699,11 @@ class LibEditor:
         
         btn_frame = ttk.Frame(dialog)
         btn_frame.pack(fill=tk.X, padx=10, pady=10)
-        ttk.Button(btn_frame, text="Åbn og Rediger", command=select).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Annuller", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(btn_frame, text="Open and Edit", command=select).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
     
     def _parse_lib_file(self, filepath):
-        """Parse en eksisterende lib fil for at finde properties og base class"""
+        """Parse an existing lib file to find properties and base class"""
         info = {
             'properties': [],
             'methods': [],
@@ -726,13 +726,13 @@ class LibEditor:
                 info['tk_widget_type'] = tk_match.group(1)
                 info['base_class'] = tk_match.group(1)
             
-            # Find properties fra __init__ parameters
+            # Find properties from __init__ parameters
             init_match = re.search(r'def __init__\s*\([^)]+\):', content)
             if init_match:
                 params = re.findall(r'self\.(\w+)\s*=', content[:content.find('def create') if 'def create' in content else len(content)])
                 info['properties'].extend(params)
             
-            # Find properties fra _properties dict
+            # Find properties from _properties dict
             props_match = re.search(r'_properties\s*=\s*\{([^}]+)\}', content, re.DOTALL)
             if props_match:
                 prop_names = re.findall(r"'(\w+)':", props_match.group(1))
@@ -740,41 +740,41 @@ class LibEditor:
                     if name not in info['properties']:
                         info['properties'].append(name)
             
-            # Find set_ metoder
+            # Find set_ methods
             set_methods = re.findall(r'def (set_\w+)\s*\(', content)
             info['methods'].extend(set_methods)
             
-            # Find CONFIG_MAP hvis den findes
+            # Find CONFIG_MAP if it exists
             config_match = re.search(r'CONFIG_MAP\s*=\s*\{([^}]+)\}', content, re.DOTALL)
             if config_match:
                 config_items = re.findall(r"'(\w+)':\s*'(\w+)'", config_match.group(1))
                 info['config_map'] = {pytml: python for pytml, python in config_items}
             
         except Exception as e:
-            print(f"Fejl ved parsing af {filepath}: {e}")
+            print(f"Error parsing {filepath}: {e}")
         
         return info
     
     def _load_lib(self, lib_name, lib_info=None):
-        """Indlæs en eksisterende lib og vis dens properties"""
+        """Load an existing lib and show its properties"""
         self.tag_name_entry.delete(0, tk.END)
         self.tag_name_entry.insert(0, lib_name)
         
-        # Ryd eksisterende valgte
+        # Clear existing selected
         self._clear_selected()
         
         if lib_info:
-            # Vis eksisterende properties som allerede valgte
+            # Show existing properties as already selected
             for prop in lib_info.get('properties', []):
                 if prop not in ['name', 'parent', '_tk_button', '_tk_label', '_tk_widget', 
                                '_ready', '_context', '_click_handler', 'parent_window']:
                     self._add_to_selected(prop, prop, 'config')
             
-            # Sæt base class
+            # Set base class
             base = lib_info.get('tk_widget_type', 'Button')
             self.current_class_name = base
             
-            # Forsøg at indlæse tkinter klassen
+            # Try to load tkinter class
             try:
                 if hasattr(tk, base):
                     self.current_class = getattr(tk, base)
@@ -783,7 +783,7 @@ class LibEditor:
                 else:
                     self.current_class = tk.Button
                 
-                # Vis alle tkinter options så man kan tilføje nye
+                # Show all tkinter options so you can add new ones
                 members = self.scanner.get_class_members(self.current_class)
                 
                 self.config_tree.delete(*self.config_tree.get_children())
@@ -791,7 +791,7 @@ class LibEditor:
                 config_map = lib_info.get('config_map', {})
                 
                 for opt in members['config_options']:
-                    # Marker hvis den allerede er tilføjet
+                    # Mark if already added
                     pytml_name = ''
                     for pytml, python in config_map.items():
                         if python == opt['name']:
@@ -806,41 +806,41 @@ class LibEditor:
                 for m in members['methods']:
                     self.method_tree.insert('', tk.END, text=m['name'], values=(m['signature'], ''))
                 
-                self.status_var.set(f"Redigerer: {lib_name} (baseret på tk.{base}) - {len(existing_props)} properties")
+                self.status_var.set(f"Editing: {lib_name} (based on tk.{base}) - {len(existing_props)} properties")
                 
             except Exception as e:
-                self.status_var.set(f"Redigerer: {lib_name} - kunne ikke indlæse tkinter klasse: {e}")
+                self.status_var.set(f"Editing: {lib_name} - could not load tkinter class: {e}")
         else:
-            self.status_var.set(f"Redigerer: {lib_name}")
+            self.status_var.set(f"Editing: {lib_name}")
     
     def _save_lib(self):
         tag_name = self.tag_name_entry.get()
         if not tag_name:
-            messagebox.showerror("Fejl", "Angiv et tag navn")
+            messagebox.showerror("Error", "Please enter a tag name")
             return
         
         libs_dir = os.path.join(os.path.dirname(__file__), 'libs')
         filepath = os.path.join(libs_dir, f"{tag_name}.py")
         
         if os.path.exists(filepath):
-            # Eksisterende lib - tilbyd at tilføje nye properties
+            # Existing lib - offer to add new properties
             choice = messagebox.askyesnocancel(
-                "Eksisterende Lib",
-                f"{tag_name}.py eksisterer allerede.\n\n"
-                "Ja = Tilføj kun NYE properties\n"
-                "Nej = Overskriv hele filen\n"
-                "Annuller = Afbryd"
+                "Existing Lib",
+                f"{tag_name}.py already exists.\n\n"
+                "Yes = Add only NEW properties\n"
+                "No = Overwrite entire file\n"
+                "Cancel = Abort"
             )
             
-            if choice is None:  # Annuller
+            if choice is None:  # Cancel
                 return
-            elif choice:  # Ja - tilføj nye
+            elif choice:  # Yes - add new
                 self._add_properties_to_existing(filepath, tag_name)
                 return
-            # Nej - fortsæt med overskriv
+            # No - continue with overwrite
         
         if not self.current_class:
-            messagebox.showerror("Fejl", "Vælg en klasse først")
+            messagebox.showerror("Error", "Please select a class first")
             return
         
         code = self._generate_lib_code(tag_name)
@@ -848,29 +848,29 @@ class LibEditor:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(code)
         
-        messagebox.showinfo("Gemt", f"Lib gemt: {filepath}")
+        messagebox.showinfo("Saved", f"Lib saved: {filepath}")
     
     def _add_properties_to_existing(self, filepath, tag_name):
-        """Tilføj nye properties og metoder til en eksisterende lib fil"""
+        """Add new properties and methods to an existing lib file"""
         import re
         
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Find eksisterende properties og metoder
+        # Find existing properties and methods
         lib_info = self._parse_lib_file(filepath)
         existing_props = set(lib_info.get('properties', []))
         existing_config_map = lib_info.get('config_map', {})
         existing_methods = set(lib_info.get('methods', []))
         
-        # Find nye configs (ikke allerede i filen)
+        # Find new configs (not already in file)
         new_configs = []
         for m in self.selected_members:
             if m['type'] == 'config':
                 if m['pytml'] not in existing_props and m['pytml'] not in existing_config_map:
                     new_configs.append(m)
         
-        # Find nye metoder (ikke allerede i filen)
+        # Find new methods (not already in file)
         new_methods_list = []
         for m in self.selected_members:
             if m['type'] == 'method':
@@ -879,16 +879,16 @@ class LibEditor:
                     new_methods_list.append(m)
         
         if not new_configs and not new_methods_list:
-            messagebox.showinfo("Info", "Ingen nye properties eller metoder at tilføje!")
+            messagebox.showinfo("Info", "No new properties or methods to add!")
             return
         
-        # Opret backup
+        # Create backup
         backup_path = filepath + '.backup'
         with open(backup_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
         try:
-            # Tilføj til CONFIG_MAP hvis den findes
+            # Add to CONFIG_MAP if it exists
             if 'CONFIG_MAP' in content:
                 config_map_match = re.search(r'(CONFIG_MAP\s*=\s*\{)([^}]*)(})', content, re.DOTALL)
                 if config_map_match:
@@ -897,48 +897,48 @@ class LibEditor:
                     new_map = config_map_match.group(1) + existing_map.rstrip() + '\n' + new_map_entries + '\n' + config_map_match.group(3)
                     content = content[:config_map_match.start()] + new_map + content[config_map_match.end():]
             
-            # Tilføj til __init__ kwargs
+            # Add to __init__ kwargs
             init_match = re.search(r'(def __init__\s*\(self,\s*name[^)]*\):)', content)
             if init_match:
-                # Find hvor kwargs bruges
+                # Find where kwargs are used
                 kwargs_section = re.search(r'(self\.x\s*=\s*kwargs\.get.*?\n)', content)
                 if kwargs_section:
                     new_init_lines = '\n'.join([f"        self.{c['pytml']} = kwargs.get('{c['pytml']}', '')" for c in new_configs])
                     insert_pos = kwargs_section.end()
                     content = content[:insert_pos] + new_init_lines + '\n' + content[insert_pos:]
             
-            # Tilføj set_ metoder for nye properties
-            # Find sidste metode i klassen
+            # Add set_ methods for new properties
+            # Find last method in class
             class_end = content.rfind('\nclass ')
             if class_end == -1:
                 class_end = len(content)
             
-            # Find et godt sted at indsætte (efter sidste set_ metode eller før class)
+            # Find a good place to insert (after last set_ method or before class)
             last_set_method = -1
             for match in re.finditer(r'def set_\w+\([^)]+\):[^}]+?return self', content):
                 last_set_method = match.end()
             
             if last_set_method > 0:
                 new_methods_code = '\n'
-                # Tilføj set_ metoder for nye config properties
+                # Add set_ methods for new config properties
                 for c in new_configs:
                     widget_var = f"_tk_{tag_name}" if tag_name in ['button', 'label', 'entry', 'window'] else '_tk_widget'
                     tk_prop = c['python']
                     new_methods_code += f'''
     def set_{c['pytml']}(self, value):
-        """Sæt {c['pytml']}"""
+        """Set {c['pytml']}"""
         self.{c['pytml']} = value
         if self.{widget_var}:
             self.{widget_var}.configure({tk_prop}=value)
         return self
 '''
-                # Tilføj wrapper metoder for nye methods (f.eks. exit -> destroy)
+                # Add wrapper methods for new methods (e.g. exit -> destroy)
                 for m in new_methods_list:
                     widget_var = f"_tk_{tag_name}" if tag_name in ['button', 'label', 'entry', 'window'] else '_tk_widget'
                     python_method = m['python']
                     new_methods_code += f'''
     def {m['pytml']}(self):
-        """Kald {m['python']}"""
+        """Call {m['python']}"""
         if self.{widget_var}:
             self.{widget_var}.{python_method}()
         return self
@@ -948,30 +948,30 @@ class LibEditor:
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(content)
             
-            # Fjern backup
+            # Remove backup
             os.remove(backup_path)
             
-            # Byg besked
+            # Build message
             msg_parts = []
             if new_configs:
                 msg_parts.append(f"{len(new_configs)} properties:\n" + 
                     '\n'.join([f"  • {c['pytml']} → {c['python']}" for c in new_configs]))
             if new_methods_list:
-                msg_parts.append(f"{len(new_methods_list)} metoder:\n" + 
+                msg_parts.append(f"{len(new_methods_list)} methods:\n" + 
                     '\n'.join([f"  • {m['pytml']}() → {m['python']}()" for m in new_methods_list]))
             
-            messagebox.showinfo("Gemt", 
-                f"Tilføjet til {tag_name}.py:\n\n" + '\n\n'.join(msg_parts))
+            messagebox.showinfo("Saved", 
+                f"Added to {tag_name}.py:\n\n" + '\n\n'.join(msg_parts))
             
         except Exception as e:
-            # Gendan backup ved fejl
+            # Restore backup on error
             if os.path.exists(backup_path):
                 with open(backup_path, 'r', encoding='utf-8') as f:
                     original = f.read()
                 with open(filepath, 'w', encoding='utf-8') as f:
                     f.write(original)
                 os.remove(backup_path)
-            messagebox.showerror("Fejl", f"Kunne ikke opdatere lib: {e}")
+            messagebox.showerror("Error", f"Could not update lib: {e}")
     
     def _generate_lib_code(self, tag_name):
         class_name = tag_name.capitalize()
@@ -984,8 +984,8 @@ class LibEditor:
         props_code = "\n".join([f"        '{c['pytml']}': PropertyDescriptor('{c['pytml']}', str, default='')," for c in configs])
         
         return f'''"""
-PyTML {class_name} Module - Auto-genereret af LibEditor
-Baseret på: tkinter.{base_class}
+PyTML {class_name} Module - Auto-generated by LibEditor
+Based on: tkinter.{base_class}
 """
 
 import tkinter as tk
