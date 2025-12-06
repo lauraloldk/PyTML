@@ -5,7 +5,7 @@
 <wnd1_show>
 <button text="+" name="btn_plus" parent="wnd1" x="20" y="30">
 <button text="-" name="btn_minus" parent="wnd1" x="180" y="30">
-<button text="Afslut" name="btn_exit" parent="wnd1" x="100" y="140">
+<button text="Exit" name="btn_exit" parent="wnd1" x="100" y="140">
 <label text="0" name="lbl1" parent="wnd1" x="140" y="40">
 </gui>
 <forever interval="100">
@@ -23,14 +23,3 @@
 <wnd1_exit>
 </if>
 </forever>
-
-
-
-
-
-
-
-
-
-
-
