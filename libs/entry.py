@@ -332,12 +332,13 @@ def _parse_entry_readonly(match, current, context):
 
 # GUI Editor info
 def get_gui_info():
-    """Returner GUI editor information"""
+    """Return GUI editor information"""
     return {
         'type': 'widget',
         'category': 'entry',
         'display_name': 'Entry',
         'icon': '✏️',
+        'framework': 'tkinter',
         'default_size': (150, 25),
         'properties': ['name', 'x', 'y', 'width', 'height', 'parent', 'placeholder'],
         'syntax': '<entry name="txtInput" parent="wnd1" x="0" y="0">'

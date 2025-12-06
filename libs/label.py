@@ -264,12 +264,13 @@ def _parse_label_text_ref(match, current, context):
 
 # GUI Editor info
 def get_gui_info():
-    """Returner GUI editor information"""
+    """Return GUI editor information"""
     return {
         'type': 'widget',
         'category': 'label',
         'display_name': 'Label',
         'icon': '📝',
+        'framework': 'tkinter',
         'default_size': (100, 25),
         'properties': ['name', 'text', 'x', 'y', 'width', 'height', 'parent'],
         'syntax': '<label text="Label" name="lbl1" parent="wnd1" x="0" y="0">'

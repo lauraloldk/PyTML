@@ -47,7 +47,13 @@ class ActionNode:
 
 
 class Window:
-    """Repræsenterer et vindue i PyTML"""
+    """Repræsenterer et vindue i PyTML
+    
+    Supports multiple graphics frameworks:
+    - Native tkinter widgets
+    - Canvas-based graphics (turtle, matplotlib)
+    - Embedded surfaces (pygame via embed)
+    """
     
     def __init__(self, name, title="PyTML Window", width=300, height=300):
         self.name = name
@@ -60,6 +66,8 @@ class Window:
         self._ready = False
         self._tk_window = None
         self._widgets = {}
+        self._canvas = None  # For canvas-based graphics
+        self._embed_frame = None  # For embedding external surfaces
     
     def _create_window(self):
         """Opret det faktiske tkinter vindue"""
@@ -69,6 +77,58 @@ class Window:
             self._tk_window.geometry(f"{self.width}x{self.height}")
             self._tk_window.protocol("WM_DELETE_WINDOW", self.hide)
         return self._tk_window
+    
+    def get_canvas(self, **kwargs):
+        """Get or create a canvas for drawing graphics (turtle, plots, etc.)
+        
+        Returns a tk.Canvas that can be used for:
+        - Turtle graphics (turtle.RawTurtle)
+        - Matplotlib embedding (FigureCanvasTkAgg)
+        - Custom drawing
+        """
+        self._create_window()
+        if self._canvas is None:
+            self._canvas = tk.Canvas(
+                self._tk_window,
+                width=kwargs.get('width', self.width),
+                height=kwargs.get('height', self.height - 30),
+                bg=kwargs.get('bg', '#1e1e1e'),
+                highlightthickness=0
+            )
+            self._canvas.pack(fill=tk.BOTH, expand=True)
+        return self._canvas
+    
+    def get_embed_frame(self, **kwargs):
+        """Get or create a frame for embedding external surfaces
+        
+        Returns a tk.Frame that can be used for:
+        - Pygame embedding (via os.environ['SDL_WINDOWID'])
+        - Other external graphics libraries
+        """
+        self._create_window()
+        if self._embed_frame is None:
+            self._embed_frame = tk.Frame(
+                self._tk_window,
+                width=kwargs.get('width', self.width),
+                height=kwargs.get('height', self.height - 30),
+                bg=kwargs.get('bg', '#000000')
+            )
+            self._embed_frame.pack(fill=tk.BOTH, expand=True)
+            self._embed_frame.update()  # Ensure winfo_id() is available
+        return self._embed_frame
+    
+    def get_window_id(self):
+        """Get the window ID for embedding external graphics (pygame, etc.)
+        
+        Usage with pygame:
+            import os
+            os.environ['SDL_WINDOWID'] = str(window.get_window_id())
+            pygame.display.init()
+        """
+        if self._embed_frame:
+            return self._embed_frame.winfo_id()
+        self._create_window()
+        return self._tk_window.winfo_id()
     
     def show(self):
         """Vis vinduet"""
@@ -90,6 +150,8 @@ class Window:
         if self._tk_window:
             self._tk_window.destroy()
             self._tk_window = None
+            self._canvas = None
+            self._embed_frame = None
         self.visible = False
         return self
     
@@ -443,15 +505,24 @@ def _parse_window_size(match, current, context):
 
 # GUI Editor info
 def get_gui_info():
-    """Returner GUI editor information"""
+    """Return GUI editor information
+    
+    This window container can host:
+    - Native tkinter widgets (Button, Label, Entry, etc.)
+    - Canvas-based graphics (turtle, matplotlib plots)
+    - Embedded surfaces (pygame via SDL_WINDOWID)
+    """
     return {
         'type': 'container',
         'category': 'window',
         'display_name': 'Window',
-        'icon': '📦',
+        'icon': '🪟',
+        'framework': 'tkinter',
         'default_size': (300, 200),
         'properties': ['name', 'title', 'size'],
-        'syntax': '<window title="Window" size="300","200" name="wnd1">'
+        'syntax': '<window title="Window" size="300","200" name="wnd1">',
+        'supports_frameworks': ['tkinter', 'canvas', 'pygame', 'matplotlib', 'turtle'],
+        'description': 'A window container that can host tkinter widgets, canvas graphics, or embedded surfaces'
     }
 
 

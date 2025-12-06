@@ -339,12 +339,13 @@ def _parse_button_enabled(match, current, context):
 
 # GUI Editor info
 def get_gui_info():
-    """Returner GUI editor information"""
+    """Return GUI editor information"""
     return {
         'type': 'widget',
         'category': 'button',
         'display_name': 'Button',
         'icon': '🔘',
+        'framework': 'tkinter',
         'default_size': (100, 30),
         'properties': ['name', 'text', 'x', 'y', 'width', 'height', 'parent'],
         'syntax': '<button text="Button" name="btn1" parent="wnd1" x="0" y="0">'
