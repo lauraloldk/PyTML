@@ -1,0 +1,36 @@
+<noterminate>
+<var name="counter" value="0">
+<gui>
+<window title="Counter: 0" name="wnd1" size="300","200">
+<wnd1_show>
+<button text="+" name="btn_plus" parent="wnd1" x="20" y="30">
+<button text="-" name="btn_minus" parent="wnd1" x="180" y="30">
+<button text="Afslut" name="btn_exit" parent="wnd1" x="100" y="140">
+<label text="0" name="lbl1" parent="wnd1" x="140" y="40">
+</gui>
+<forever interval="100">
+<if event="<btn_plus_click>">
+<counter_value += 1>
+<lbl1_text="<counter_value>">
+<wnd1_title="Counter: <counter_value>">
+</if>
+<if event="<btn_minus_click>">
+<counter_value -= 1>
+<lbl1_text="<counter_value>">
+<wnd1_title="Counter: <counter_value>">
+</if>
+<if event="<btn_exit_click>">
+<wnd1_exit>
+</if>
+</forever>
+
+
+
+
+
+
+
+
+
+
+
