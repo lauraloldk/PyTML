@@ -2,6 +2,11 @@
 PyTML Editor Plugin: GUI Edit Mode
 Dynamic visual editing of GUI elements from libs
 Container-based with REALTIME synchronization to code
+
+Supports multiple graphics frameworks:
+- tkinter widgets (native)
+- Canvas-based graphics (turtle, matplotlib, etc.)
+- Embedded surfaces (pygame, etc.)
 """
 
 import tkinter as tk
@@ -15,18 +20,52 @@ import importlib.util
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+# Framework types that can be hosted in PyTML windows
+FRAMEWORK_TYPES = {
+    'tkinter': {
+        'name': 'Tkinter Widgets',
+        'description': 'Native tkinter widgets (Button, Label, Entry, etc.)',
+        'embed_method': 'native'
+    },
+    'canvas': {
+        'name': 'Canvas Graphics', 
+        'description': 'Canvas-based drawing (turtle, matplotlib plots)',
+        'embed_method': 'canvas'
+    },
+    'surface': {
+        'name': 'External Surface',
+        'description': 'External graphics surfaces (pygame, etc.)',
+        'embed_method': 'embed'
+    }
+}
+
+
 class GUINodeRegistry:
-    """Registry of all GUI node types from libs"""
+    """Registry of all GUI node types from libs - dynamically discovers all available elements"""
     
     def __init__(self):
         self.nodes = {}
         self.containers = []
         self.widgets = []
+        self.graphics = []  # Canvas/plot elements
+        self.surfaces = []  # Embedded surfaces (pygame, etc.)
+        self.all_items = []  # All items in a flat list for the menu
+        self._categories = {}  # Grouped by category
     
     def load_from_libs(self):
+        """Scan all libs and discover GUI elements"""
         self.nodes = {}
         self.containers = []
         self.widgets = []
+        self.graphics = []
+        self.surfaces = []
+        self.all_items = []
+        self._categories = {
+            'Containers': [],
+            'Widgets': [],
+            'Graphics': [],
+            'Surfaces': []
+        }
         
         libs_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'libs')
         
@@ -34,8 +73,12 @@ class GUINodeRegistry:
             if lib_file.endswith('__init__.py'):
                 continue
             self._load_from_lib(lib_file)
+        
+        # Build flat list for menu
+        self._build_menu_items()
     
     def _load_from_lib(self, filepath):
+        """Load GUI info from a lib file"""
         module_name = os.path.basename(filepath)[:-3]
         
         try:
@@ -46,21 +89,84 @@ class GUINodeRegistry:
             if hasattr(module, 'get_gui_info'):
                 gui_info = module.get_gui_info()
                 category = gui_info.get('category', module_name)
+                gui_info['_module'] = module_name
+                gui_info['_source'] = filepath
                 self.nodes[category] = gui_info
                 
-                if gui_info.get('type') == 'container':
+                element_type = gui_info.get('type', 'widget')
+                framework = gui_info.get('framework', 'tkinter')
+                
+                if element_type == 'container':
                     self.containers.append(gui_info)
-                else:
+                    self._categories['Containers'].append(gui_info)
+                elif element_type == 'widget':
                     self.widgets.append(gui_info)
+                    self._categories['Widgets'].append(gui_info)
+                elif element_type == 'graphic' or framework == 'canvas':
+                    self.graphics.append(gui_info)
+                    self._categories['Graphics'].append(gui_info)
+                elif element_type == 'surface' or framework in ('pygame', 'sdl', 'opengl'):
+                    self.surfaces.append(gui_info)
+                    self._categories['Surfaces'].append(gui_info)
+                else:
+                    # Default to widgets
+                    self.widgets.append(gui_info)
+                    self._categories['Widgets'].append(gui_info)
                     
         except Exception as e:
             print(f"GUINodeRegistry: Could not load {filepath}: {e}")
+    
+    def _build_menu_items(self):
+        """Build flat list of all items for dropdown menu"""
+        self.all_items = []
+        
+        # Add containers first
+        if self.containers:
+            self.all_items.append({'type': 'separator', 'label': '── Containers ──'})
+            for item in sorted(self.containers, key=lambda x: x.get('display_name', '')):
+                self.all_items.append(item)
+        
+        # Add widgets
+        if self.widgets:
+            self.all_items.append({'type': 'separator', 'label': '── Widgets ──'})
+            for item in sorted(self.widgets, key=lambda x: x.get('display_name', '')):
+                self.all_items.append(item)
+        
+        # Add graphics elements
+        if self.graphics:
+            self.all_items.append({'type': 'separator', 'label': '── Graphics ──'})
+            for item in sorted(self.graphics, key=lambda x: x.get('display_name', '')):
+                self.all_items.append(item)
+        
+        # Add surface elements
+        if self.surfaces:
+            self.all_items.append({'type': 'separator', 'label': '── Surfaces ──'})
+            for item in sorted(self.surfaces, key=lambda x: x.get('display_name', '')):
+                self.all_items.append(item)
     
     def get_containers(self):
         return self.containers
     
     def get_widgets(self):
         return self.widgets
+    
+    def get_graphics(self):
+        return self.graphics
+    
+    def get_surfaces(self):
+        return self.surfaces
+    
+    def get_all_items(self):
+        """Get all items for the Add Item menu"""
+        return self.all_items
+    
+    def get_categories(self):
+        """Get items grouped by category"""
+        return self._categories
+    
+    def get_by_category(self, category):
+        """Get a specific GUI info by category name"""
+        return self.nodes.get(category)
 
 
 class GUIBlock:
@@ -290,6 +396,9 @@ class GUICanvas(tk.Canvas):
         border_color = '#ff6b6b' if widget.selected else colors['border']
         border_width = 2 if widget.selected else 1
         
+        element_type = widget.get_property('element_type', 'widget')
+        framework = widget.get_property('framework', 'tkinter')
+        
         if widget.element_type == 'button':
             self.create_rectangle(
                 abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
@@ -330,6 +439,75 @@ class GUICanvas(tk.Canvas):
                 anchor='w', tags=(tag, 'widget', 'element')
             )
         
+        elif element_type == 'graphic' or framework == 'canvas':
+            # Canvas/Plot/Turtle graphics - draw as a canvas placeholder
+            self.create_rectangle(
+                abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
+                fill='#1a1a2e', outline='#16c79a' if not widget.selected else border_color,
+                width=border_width, tags=(tag, 'widget', 'element')
+            )
+            # Draw grid pattern to indicate canvas
+            for i in range(0, widget.width, 20):
+                self.create_line(abs_x + i, abs_y, abs_x + i, abs_y + widget.height,
+                               fill='#2a2a4e', tags=(tag, 'widget', 'element'))
+            for i in range(0, widget.height, 20):
+                self.create_line(abs_x, abs_y + i, abs_x + widget.width, abs_y + i,
+                               fill='#2a2a4e', tags=(tag, 'widget', 'element'))
+            # Label
+            text = widget.get_property('text', f'[{widget.element_type}]')
+            self.create_text(
+                abs_x + widget.width // 2, abs_y + widget.height // 2,
+                text=text, fill='#16c79a', font=('Consolas', 10, 'bold'),
+                tags=(tag, 'widget', 'element')
+            )
+            # Framework indicator
+            self.create_text(
+                abs_x + widget.width - 5, abs_y + 12,
+                text=f"🎨 {framework}", fill='#808080', font=('Consolas', 8),
+                anchor='e', tags=(tag, 'widget', 'element')
+            )
+        
+        elif element_type == 'surface' or framework in ('pygame', 'sdl', 'opengl'):
+            # Embedded surface (pygame, etc.) - draw as embedded frame placeholder
+            self.create_rectangle(
+                abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
+                fill='#0d0d0d', outline='#e94560' if not widget.selected else border_color,
+                width=border_width, tags=(tag, 'widget', 'element')
+            )
+            # Draw pattern to indicate embedded surface
+            self.create_line(abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
+                           fill='#2a2a2a', tags=(tag, 'widget', 'element'))
+            self.create_line(abs_x + widget.width, abs_y, abs_x, abs_y + widget.height,
+                           fill='#2a2a2a', tags=(tag, 'widget', 'element'))
+            # Label
+            text = widget.get_property('text', f'[{widget.element_type}]')
+            self.create_text(
+                abs_x + widget.width // 2, abs_y + widget.height // 2,
+                text=text, fill='#e94560', font=('Consolas', 10, 'bold'),
+                tags=(tag, 'widget', 'element')
+            )
+            # Framework indicator
+            self.create_text(
+                abs_x + widget.width - 5, abs_y + 12,
+                text=f"🎮 {framework}", fill='#808080', font=('Consolas', 8),
+                anchor='e', tags=(tag, 'widget', 'element')
+            )
+        
+        else:
+            # Generic widget fallback
+            self.create_rectangle(
+                abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
+                fill='#2d3436', outline=border_color, width=border_width,
+                tags=(tag, 'widget', 'element')
+            )
+            text = widget.get_property('text', widget.name)
+            self.create_text(
+                abs_x + widget.width // 2, abs_y + widget.height // 2,
+                text=text, fill='#dfe6e9', font=('Segoe UI', 9),
+                tags=(tag, 'widget', 'element')
+            )
+        
+        # Position indicator
         self.create_text(
             abs_x + widget.width // 2, abs_y + widget.height + 8,
             text=f"({widget.x}, {widget.y})", fill='#606060', font=('Consolas', 7),
@@ -487,24 +665,17 @@ class GUIEditPanel(ttk.Frame):
         
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
         
-        # Element buttons
-        ttk.Label(toolbar, text="Add:").pack(side=tk.LEFT, padx=5)
+        # Add Item button with dropdown menu
+        self.add_item_btn = ttk.Menubutton(toolbar, text="➕ Add Item ▼")
+        self.add_item_btn.pack(side=tk.LEFT, padx=5)
         
-        for gui_info in self.registry.get_containers():
-            icon = gui_info.get('icon', '📦')
-            name = gui_info.get('display_name', gui_info['category'])
-            btn = ttk.Button(toolbar, text=f"{icon} {name}", 
-                           command=lambda g=gui_info: self._add_container(g))
-            btn.pack(side=tk.LEFT, padx=2)
+        # Create the dropdown menu
+        self.add_menu = tk.Menu(self.add_item_btn, tearoff=0)
+        self.add_item_btn['menu'] = self.add_menu
+        self._populate_add_menu()
         
-        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=5, fill=tk.Y)
-        
-        for gui_info in self.registry.get_widgets():
-            icon = gui_info.get('icon', '📦')
-            name = gui_info.get('display_name', gui_info['category'])
-            btn = ttk.Button(toolbar, text=f"{icon} {name}",
-                           command=lambda g=gui_info: self._add_widget(g))
-            btn.pack(side=tk.LEFT, padx=2)
+        # Refresh button to reload libs
+        ttk.Button(toolbar, text="🔄", width=3, command=self._refresh_registry).pack(side=tk.LEFT, padx=2)
         
         # Main area
         main_pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
@@ -610,6 +781,99 @@ class GUIEditPanel(ttk.Frame):
         ttk.Button(self.props_content, text="🗑️ Delete Element", 
                   command=self._delete_selected).pack(fill=tk.X, pady=(10, 0))
     
+    def _populate_add_menu(self):
+        """Populate the Add Item dropdown menu with all available elements from libs"""
+        self.add_menu.delete(0, tk.END)
+        
+        categories = self.registry.get_categories()
+        
+        # Add Containers section
+        if categories.get('Containers'):
+            self.add_menu.add_command(label="── Containers ──", state='disabled')
+            for gui_info in categories['Containers']:
+                icon = gui_info.get('icon', '📦')
+                name = gui_info.get('display_name', gui_info.get('category', 'Unknown'))
+                framework = gui_info.get('framework', 'tkinter')
+                label = f"{icon} {name}"
+                if framework != 'tkinter':
+                    label += f" ({framework})"
+                self.add_menu.add_command(
+                    label=label,
+                    command=lambda g=gui_info: self._add_item(g)
+                )
+            self.add_menu.add_separator()
+        
+        # Add Widgets section
+        if categories.get('Widgets'):
+            self.add_menu.add_command(label="── Widgets ──", state='disabled')
+            for gui_info in categories['Widgets']:
+                icon = gui_info.get('icon', '📦')
+                name = gui_info.get('display_name', gui_info.get('category', 'Unknown'))
+                framework = gui_info.get('framework', 'tkinter')
+                label = f"{icon} {name}"
+                if framework != 'tkinter':
+                    label += f" ({framework})"
+                self.add_menu.add_command(
+                    label=label,
+                    command=lambda g=gui_info: self._add_item(g)
+                )
+            self.add_menu.add_separator()
+        
+        # Add Graphics section (for canvas-based elements like plots, turtle, etc.)
+        if categories.get('Graphics'):
+            self.add_menu.add_command(label="── Graphics ──", state='disabled')
+            for gui_info in categories['Graphics']:
+                icon = gui_info.get('icon', '🎨')
+                name = gui_info.get('display_name', gui_info.get('category', 'Unknown'))
+                framework = gui_info.get('framework', 'canvas')
+                label = f"{icon} {name} ({framework})"
+                self.add_menu.add_command(
+                    label=label,
+                    command=lambda g=gui_info: self._add_item(g)
+                )
+            self.add_menu.add_separator()
+        
+        # Add Surfaces section (for embedded surfaces like pygame)
+        if categories.get('Surfaces'):
+            self.add_menu.add_command(label="── Surfaces ──", state='disabled')
+            for gui_info in categories['Surfaces']:
+                icon = gui_info.get('icon', '🎮')
+                name = gui_info.get('display_name', gui_info.get('category', 'Unknown'))
+                framework = gui_info.get('framework', 'surface')
+                label = f"{icon} {name} ({framework})"
+                self.add_menu.add_command(
+                    label=label,
+                    command=lambda g=gui_info: self._add_item(g)
+                )
+        
+        # If no items found, show info
+        if not any(categories.values()):
+            self.add_menu.add_command(
+                label="No GUI elements found in libs/",
+                state='disabled'
+            )
+            self.add_menu.add_separator()
+            self.add_menu.add_command(
+                label="Add get_gui_info() to lib files",
+                state='disabled'
+            )
+    
+    def _refresh_registry(self):
+        """Refresh the registry by reloading all libs"""
+        self.registry.load_from_libs()
+        self._populate_add_menu()
+        self.info_var.set(f"Refreshed: Found {len(self.registry.nodes)} GUI elements")
+    
+    def _add_item(self, gui_info):
+        """Add any item from the registry - unified handler"""
+        element_type = gui_info.get('type', 'widget')
+        
+        if element_type == 'container':
+            self._add_container(gui_info)
+        else:
+            # All non-containers are treated as widgets (including graphics/surfaces)
+            self._add_widget(gui_info)
+
     def _on_prop_change(self, event=None):
         """Handle property change with realtime sync"""
         element = self.canvas.selected_element
@@ -766,13 +1030,15 @@ class GUIEditPanel(ttk.Frame):
         category = gui_info['category']
         name = self._get_next_name(category[:3])
         default_size = gui_info.get('default_size', (300, 200))
+        framework = gui_info.get('framework', 'tkinter')
         
         element = GUIElement(category, name, 50, 50, default_size[0], default_size[1])
         element.set_property('title', gui_info.get('display_name', 'Window'))
+        element.set_property('framework', framework)
         
         self.canvas.add_window(element)
         self._sync_to_code()
-        self.info_var.set(f"Added window: {name}")
+        self.info_var.set(f"Added {category}: {name}")
     
     def _add_widget(self, gui_info):
         if not self.canvas.windows:
@@ -789,17 +1055,34 @@ class GUIEditPanel(ttk.Frame):
         category = gui_info['category']
         name = self._get_next_name(category[:3])
         default_size = gui_info.get('default_size', (100, 30))
+        framework = gui_info.get('framework', 'tkinter')
+        element_type = gui_info.get('type', 'widget')
         
         element = GUIElement(category, name, 10, 10, default_size[0], default_size[1])
+        element.set_property('framework', framework)
+        element.set_property('element_type', element_type)
         
+        # Set default properties based on element type
         if category in ('button', 'label'):
             element.set_property('text', gui_info.get('display_name', category.title()))
         elif category == 'entry':
             element.set_property('placeholder', 'Enter text...')
+        elif element_type == 'graphic':
+            # Canvas/plot elements
+            element.set_property('text', f"[{gui_info.get('display_name', category)}]")
+        elif element_type == 'surface':
+            # Embedded surfaces (pygame, etc.)
+            element.set_property('text', f"[{gui_info.get('display_name', category)}]")
+        else:
+            # Generic - use display name or category
+            display_name = gui_info.get('display_name', category.title())
+            element.set_property('text', display_name)
         
         self.canvas.add_widget(element, parent)
         self._sync_to_code()
-        self.info_var.set(f"Added {category} to {parent.name}")
+        
+        type_label = element_type if element_type != 'widget' else category
+        self.info_var.set(f"Added {type_label} '{name}' to {parent.name}")
     
     def _on_element_select(self, element):
         if element:
