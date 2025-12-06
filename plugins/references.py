@@ -1,7 +1,7 @@
 """
 PyTML Editor Plugin: References Browser
-Viser alle tilladte referencer, tags, metoder, variabler og properties
-Hjælper udviklere med at se alle kombinationer og muligheder
+Displays all allowed references, tags, methods, variables and properties
+Helps developers see all combinations and possibilities
 """
 
 import tkinter as tk
@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class TagInfo:
-    """Information om et tag"""
+    """Information about a tag"""
     
     def __init__(self, name, tag_type, module, syntax, description=""):
         self.name = name
@@ -24,14 +24,14 @@ class TagInfo:
         self.module = module
         self.syntax = syntax
         self.description = description
-        self.attributes = []  # Liste af AttributeInfo
-        self.methods = []     # Liste af MethodInfo
-        self.accepts_refs = []  # Hvilke ref typer kan bruges i dette tag
-        self.can_be_ref_in = []  # Hvor kan dette tag refereres
+        self.attributes = []  # List of AttributeInfo
+        self.methods = []     # List of MethodInfo
+        self.accepts_refs = []  # Which ref types can be used in this tag
+        self.can_be_ref_in = []  # Where can this tag be referenced
 
 
 class AttributeInfo:
-    """Information om en attribut"""
+    """Information about an attribute"""
     
     def __init__(self, name, attr_type, required=False, default=None, description=""):
         self.name = name
@@ -39,11 +39,11 @@ class AttributeInfo:
         self.required = required
         self.default = default
         self.description = description
-        self.accepts_variable = True  # Kan bruge <var_value> eller $var
+        self.accepts_variable = True  # Can use <var_value> or $var
 
 
 class MethodInfo:
-    """Information om en metode/action"""
+    """Information about a method/action"""
     
     def __init__(self, name, syntax, description=""):
         self.name = name
@@ -53,7 +53,7 @@ class MethodInfo:
 
 
 class ReferencesRegistry:
-    """Registry over alle tags, metoder og deres relationer"""
+    """Registry of all tags, methods and their relationships"""
     
     def __init__(self):
         self.tags = {}
@@ -62,75 +62,75 @@ class ReferencesRegistry:
         self._load_all()
     
     def _load_all(self):
-        """Load alle tags og metoder fra libs"""
+        """Load all tags and methods from libs"""
         self._load_builtin_tags()
         self._load_from_libs()
         self._analyze_relationships()
     
     def _load_builtin_tags(self):
-        """Load indbyggede tags (var, output, control flow)"""
+        """Load built-in tags (var, output, control flow)"""
         # Variable tags
         var_tag = TagInfo('var', 'variable', 'var', '<var name="x" value="...">')
-        var_tag.description = "Definer en variabel"
+        var_tag.description = "Define a variable"
         var_tag.attributes = [
-            AttributeInfo('name', 'string', required=True, description="Variablens navn"),
-            AttributeInfo('value', 'any', required=False, description="Startværdi")
+            AttributeInfo('name', 'string', required=True, description="Variable name"),
+            AttributeInfo('value', 'any', required=False, description="Initial value")
         ]
         self.tags['var'] = var_tag
         
         # Variable value reference
         var_value = TagInfo('_value', 'reference', 'var', '<varname_value>')
-        var_value.description = "Hent værdien af en variabel"
+        var_value.description = "Get the value of a variable"
         self.tags['_value'] = var_value
         
         # Output tag
-        output_tag = TagInfo('output', 'action', 'output', '<output <var_value>> eller <output "tekst">')
-        output_tag.description = "Print output til konsol"
+        output_tag = TagInfo('output', 'action', 'output', '<output <var_value>> or <output "text">')
+        output_tag.description = "Print output to console"
         output_tag.attributes = [
-            AttributeInfo('value', 'any', required=True, description="Værdi eller variabel reference")
+            AttributeInfo('value', 'any', required=True, description="Value or variable reference")
         ]
         output_tag.accepts_refs = ['variable']
         self.tags['output'] = output_tag
         
         # Control flow tags
         if_tag = TagInfo('if', 'control', 'builtin', '<if condition="...">')
-        if_tag.description = "Betinget udførelse"
+        if_tag.description = "Conditional execution"
         if_tag.attributes = [
-            AttributeInfo('condition', 'expression', required=True, description="Betingelse der evalueres")
+            AttributeInfo('condition', 'expression', required=True, description="Condition to evaluate")
         ]
         if_tag.accepts_refs = ['variable']
         self.tags['if'] = if_tag
         
-        loop_tag = TagInfo('loop', 'control', 'builtin', '<loop count="n"> eller <loop from="x" to="y">')
-        loop_tag.description = "Gentag kode"
+        loop_tag = TagInfo('loop', 'control', 'builtin', '<loop count="n"> or <loop from="x" to="y">')
+        loop_tag.description = "Repeat code"
         loop_tag.attributes = [
-            AttributeInfo('count', 'number', description="Antal gentagelser"),
-            AttributeInfo('from', 'number', description="Start værdi"),
-            AttributeInfo('to', 'number', description="Slut værdi"),
-            AttributeInfo('var', 'string', default='i', description="Loop variabel navn")
+            AttributeInfo('count', 'number', description="Number of repetitions"),
+            AttributeInfo('from', 'number', description="Start value"),
+            AttributeInfo('to', 'number', description="End value"),
+            AttributeInfo('var', 'string', default='i', description="Loop variable name")
         ]
         loop_tag.accepts_refs = ['variable']
         self.tags['loop'] = loop_tag
         
         block_tag = TagInfo('block', 'control', 'builtin', '<block name="...">')
-        block_tag.description = "Gruppér kode i en navngivet blok"
+        block_tag.description = "Group code in a named block"
         block_tag.attributes = [
-            AttributeInfo('name', 'string', description="Blok navn")
+            AttributeInfo('name', 'string', description="Block name")
         ]
         self.tags['block'] = block_tag
         
         # GUI block
         gui_tag = TagInfo('gui', 'container', 'builtin', '<gui>...</gui>')
-        gui_tag.description = "Container for GUI elementer"
+        gui_tag.description = "Container for GUI elements"
         self.tags['gui'] = gui_tag
         
         # Console utils
         noterminate = TagInfo('noterminate', 'control', 'console_utils', '<noterminate>')
-        noterminate.description = "Forhindrer programmet i at lukke automatisk"
+        noterminate.description = "Prevents the program from closing automatically"
         self.tags['noterminate'] = noterminate
     
     def _load_from_libs(self):
-        """Load tags fra lib filer"""
+        """Load tags from lib files"""
         libs_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'libs')
         
         for lib_file in glob.glob(os.path.join(libs_path, '*.py')):
@@ -139,14 +139,14 @@ class ReferencesRegistry:
             self._analyze_lib_file(lib_file)
     
     def _analyze_lib_file(self, filepath):
-        """Analyser en lib fil for tags og metoder"""
+        """Analyze a lib file for tags and methods"""
         module_name = os.path.basename(filepath)[:-3]
         
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Find syntax fra docstring
+            # Find syntax from docstring
             syntax_matches = re.findall(r'Syntax:\s*\n((?:\s+<[^>]+>\s*\n?)+)', content)
             
             # Find get_line_parsers patterns
@@ -156,7 +156,7 @@ class ReferencesRegistry:
             if 'get_gui_info' in content:
                 self._load_gui_info(filepath, module_name)
             
-            # Analyser baseret på module navn
+            # Analyze based on module name
             if module_name == 'window':
                 self._add_window_tags()
             elif module_name == 'button':
@@ -167,10 +167,10 @@ class ReferencesRegistry:
                 self._add_entry_tags()
                 
         except Exception as e:
-            print(f"ReferencesRegistry: Fejl ved analyse af {filepath}: {e}")
+            print(f"ReferencesRegistry: Error analyzing {filepath}: {e}")
     
     def _load_gui_info(self, filepath, module_name):
-        """Load GUI info fra et modul"""
+        """Load GUI info from a module"""
         try:
             spec = importlib.util.spec_from_file_location(module_name, filepath)
             module = importlib.util.module_from_spec(spec)
@@ -178,130 +178,130 @@ class ReferencesRegistry:
             
             if hasattr(module, 'get_gui_info'):
                 info = module.get_gui_info()
-                # GUI info er allerede håndteret via _add_*_tags metoderne
+                # GUI info is already handled via _add_*_tags methods
         except:
             pass
     
     def _add_window_tags(self):
-        """Tilføj window tags"""
+        """Add window tags"""
         window = TagInfo('window', 'element', 'window', '<window title="..." name="wnd1" size="300","200">')
-        window.description = "Opret et GUI vindue"
+        window.description = "Create a GUI window"
         window.attributes = [
-            AttributeInfo('title', 'string', required=True, description="Vinduets titel"),
-            AttributeInfo('name', 'string', required=True, description="Unikt navn til reference"),
-            AttributeInfo('size', 'stack', description="Bredde,højde i pixels")
+            AttributeInfo('title', 'string', required=True, description="Window title"),
+            AttributeInfo('name', 'string', required=True, description="Unique name for reference"),
+            AttributeInfo('size', 'stack', description="Width,height in pixels")
         ]
         window.accepts_refs = ['variable']
         window.methods = [
-            MethodInfo('show', '<name_show>', "Vis vinduet"),
-            MethodInfo('hide', '<name_hide>', "Skjul vinduet"),
-            MethodInfo('close', '<name_close>', "Luk vinduet"),
-            MethodInfo('title', '<name_title="...">', "Ændr titel"),
-            MethodInfo('size', '<name_size="w","h">', "Ændr størrelse")
+            MethodInfo('show', '<name_show>', "Show the window"),
+            MethodInfo('hide', '<name_hide>', "Hide the window"),
+            MethodInfo('close', '<name_close>', "Close the window"),
+            MethodInfo('title', '<name_title="...">', "Change title"),
+            MethodInfo('size', '<name_size="w","h">', "Change size")
         ]
         self.tags['window'] = window
     
     def _add_button_tags(self):
-        """Tilføj button tags"""
+        """Add button tags"""
         button = TagInfo('button', 'element', 'button', '<button text="..." name="btn1" parent="wnd1">')
-        button.description = "Opret en knap i et vindue"
+        button.description = "Create a button in a window"
         button.attributes = [
-            AttributeInfo('text', 'string', required=True, description="Knappens tekst"),
-            AttributeInfo('name', 'string', required=True, description="Unikt navn til reference"),
-            AttributeInfo('parent', 'element_ref', required=True, description="Parent vindue navn"),
+            AttributeInfo('text', 'string', required=True, description="Button text"),
+            AttributeInfo('name', 'string', required=True, description="Unique name for reference"),
+            AttributeInfo('parent', 'element_ref', required=True, description="Parent window name"),
             AttributeInfo('x', 'number', default='0', description="X position"),
             AttributeInfo('y', 'number', default='0', description="Y position"),
-            AttributeInfo('width', 'number', default='100', description="Bredde"),
-            AttributeInfo('height', 'number', default='30', description="Højde")
+            AttributeInfo('width', 'number', default='100', description="Width"),
+            AttributeInfo('height', 'number', default='30', description="Height")
         ]
         button.accepts_refs = ['variable', 'window']
         button.methods = [
-            MethodInfo('text', '<name_text="...">', "Ændr tekst"),
-            MethodInfo('enabled', '<name_enabled="true/false">', "Aktiver/deaktiver")
+            MethodInfo('text', '<name_text="...">', "Change text"),
+            MethodInfo('enabled', '<name_enabled="true/false">', "Enable/disable")
         ]
         self.tags['button'] = button
     
     def _add_label_tags(self):
-        """Tilføj label tags"""
+        """Add label tags"""
         label = TagInfo('label', 'element', 'label', '<label text="..." name="lbl1" parent="wnd1">')
-        label.description = "Opret et tekst label i et vindue"
+        label.description = "Create a text label in a window"
         label.attributes = [
-            AttributeInfo('text', 'string', required=True, description="Label tekst"),
-            AttributeInfo('name', 'string', required=True, description="Unikt navn til reference"),
-            AttributeInfo('parent', 'element_ref', required=True, description="Parent vindue navn"),
+            AttributeInfo('text', 'string', required=True, description="Label text"),
+            AttributeInfo('name', 'string', required=True, description="Unique name for reference"),
+            AttributeInfo('parent', 'element_ref', required=True, description="Parent window name"),
             AttributeInfo('x', 'number', default='0', description="X position"),
             AttributeInfo('y', 'number', default='0', description="Y position")
         ]
         label.accepts_refs = ['variable', 'window']
         label.methods = [
-            MethodInfo('text', '<name_text="...">', "Ændr tekst")
+            MethodInfo('text', '<name_text="...">', "Change text")
         ]
         self.tags['label'] = label
     
     def _add_entry_tags(self):
-        """Tilføj entry tags"""
+        """Add entry tags"""
         entry = TagInfo('entry', 'element', 'entry', '<entry name="txt1" parent="wnd1">')
-        entry.description = "Opret et tekstfelt i et vindue"
+        entry.description = "Create a text field in a window"
         entry.attributes = [
-            AttributeInfo('name', 'string', required=True, description="Unikt navn til reference"),
-            AttributeInfo('parent', 'element_ref', required=True, description="Parent vindue navn"),
-            AttributeInfo('placeholder', 'string', description="Placeholder tekst"),
+            AttributeInfo('name', 'string', required=True, description="Unique name for reference"),
+            AttributeInfo('parent', 'element_ref', required=True, description="Parent window name"),
+            AttributeInfo('placeholder', 'string', description="Placeholder text"),
             AttributeInfo('x', 'number', default='0', description="X position"),
             AttributeInfo('y', 'number', default='0', description="Y position"),
-            AttributeInfo('width', 'number', default='150', description="Bredde")
+            AttributeInfo('width', 'number', default='150', description="Width")
         ]
         entry.accepts_refs = ['variable', 'window']
         entry.methods = [
-            MethodInfo('value', '<name_value="...">', "Sæt/hent værdi"),
-            MethodInfo('placeholder', '<name_placeholder="...">', "Ændr placeholder"),
-            MethodInfo('readonly', '<name_readonly="true/false">', "Sæt readonly")
+            MethodInfo('value', '<name_value="...">', "Set/get value"),
+            MethodInfo('placeholder', '<name_placeholder="...">', "Change placeholder"),
+            MethodInfo('readonly', '<name_readonly="true/false">', "Set readonly")
         ]
         self.tags['entry'] = entry
     
     def _analyze_relationships(self):
-        """Analyser relationer mellem tags"""
-        # Hvilke tags kan refereres fra hvilke
+        """Analyze relationships between tags"""
+        # Which tags can be referenced from which
         for tag_name, tag in self.tags.items():
             if tag.tag_type == 'element':
-                # GUI elementer kan refereres fra andre GUI elementer
+                # GUI elements can be referenced from other GUI elements
                 tag.can_be_ref_in = ['button', 'label', 'entry', 'output']
             elif tag.tag_type == 'variable':
-                # Variabler kan refereres fra næsten alt
+                # Variables can be referenced from almost anything
                 tag.can_be_ref_in = list(self.tags.keys())
     
     def get_all_tags(self):
-        """Hent alle tags"""
+        """Get all tags"""
         return self.tags
     
     def get_tags_by_type(self, tag_type):
-        """Hent tags af en bestemt type"""
+        """Get tags of a specific type"""
         return {k: v for k, v in self.tags.items() if v.tag_type == tag_type}
     
     def get_allowed_refs_for(self, tag_name):
-        """Hent tilladte referencer for et tag"""
+        """Get allowed references for a tag"""
         tag = self.tags.get(tag_name)
         if tag:
             return tag.accepts_refs
         return []
     
     def get_reference_syntax(self):
-        """Hent alle reference syntaxer"""
+        """Get all reference syntaxes"""
         return [
             {
                 'pattern': '<varname_value>',
-                'description': 'Reference til variabel værdi',
+                'description': 'Reference to variable value',
                 'example': '<title_value>',
-                'can_use_in': 'Alle attributter der accepterer variable'
+                'can_use_in': 'All attributes that accept variables'
             },
             {
                 'pattern': '$varname',
-                'description': 'Alternativ variabel reference',
+                'description': 'Alternative variable reference',
                 'example': '$title',
                 'can_use_in': 'Conditions, output, string interpolation'
             },
             {
                 'pattern': '<elementname_method>',
-                'description': 'Kald metode på element',
+                'description': 'Call method on element',
                 'example': '<wnd1_show>',
                 'can_use_in': 'Top-level actions'
             }
@@ -309,7 +309,7 @@ class ReferencesRegistry:
 
 
 class ReferencesPanel(ttk.Frame):
-    """Panel til at vise og udforske alle referencer"""
+    """Panel to display and explore all references"""
     
     def __init__(self, parent, editor_callback=None):
         super().__init__(parent)
@@ -320,7 +320,7 @@ class ReferencesPanel(ttk.Frame):
         self._populate_tree()
     
     def _setup_ui(self):
-        """Opsæt UI"""
+        """Set up UI"""
         # Header
         header = ttk.Frame(self)
         header.pack(fill=tk.X, padx=5, pady=5)
@@ -344,7 +344,7 @@ class ReferencesPanel(ttk.Frame):
         
         self.filter_var = tk.StringVar(value='all')
         filters = [
-            ('Alle', 'all'),
+            ('All', 'all'),
             ('Elements', 'element'),
             ('Actions', 'action'),
             ('Variables', 'variable'),
@@ -366,7 +366,7 @@ class ReferencesPanel(ttk.Frame):
         self.tree = ttk.Treeview(tree_frame, show='tree headings', columns=('Type', 'Module'))
         self.tree.heading('#0', text='Tag/Reference')
         self.tree.heading('Type', text='Type')
-        self.tree.heading('Module', text='Modul')
+        self.tree.heading('Module', text='Module')
         self.tree.column('#0', width=180)
         self.tree.column('Type', width=80)
         self.tree.column('Module', width=80)
@@ -381,7 +381,7 @@ class ReferencesPanel(ttk.Frame):
         self.tree.bind('<Double-1>', self._on_double_click)
         
         # Right: Details panel
-        details_frame = ttk.LabelFrame(paned, text="📋 Detaljer")
+        details_frame = ttk.LabelFrame(paned, text="📋 Details")
         paned.add(details_frame, weight=2)
         
         self.details_text = tk.Text(details_frame, wrap=tk.WORD, 
@@ -404,9 +404,9 @@ class ReferencesPanel(ttk.Frame):
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Button(btn_frame, text="📋 Kopier Syntax", 
+        ttk.Button(btn_frame, text="📋 Copy Syntax", 
                   command=self._copy_syntax).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="➕ Indsæt i Editor", 
+        ttk.Button(btn_frame, text="➕ Insert in Editor", 
                   command=self._insert_syntax).pack(side=tk.LEFT, padx=2)
         
         # Reference syntax info
@@ -414,10 +414,10 @@ class ReferencesPanel(ttk.Frame):
                   command=self._show_ref_syntax).pack(side=tk.RIGHT, padx=2)
     
     def _populate_tree(self, filter_type='all', search=''):
-        """Fyld tree med tags"""
+        """Fill tree with tags"""
         self.tree.delete(*self.tree.get_children())
         
-        # Kategorier
+        # Categories
         categories = {
             'element': ('🪟 GUI Elements', []),
             'action': ('⚡ Actions', []),
@@ -441,7 +441,7 @@ class ReferencesPanel(ttk.Frame):
             if tag.tag_type in categories:
                 categories[tag.tag_type][1].append((tag_name, tag))
         
-        # Tilføj til tree
+        # Add to tree
         for cat_type, (cat_label, tags) in categories.items():
             if not tags:
                 continue
@@ -453,9 +453,9 @@ class ReferencesPanel(ttk.Frame):
                                          values=(tag.tag_type, tag.module),
                                          tags=('tag',))
                 
-                # Tilføj attributter
+                # Add attributes
                 if tag.attributes:
-                    attr_id = self.tree.insert(tag_id, 'end', text="📝 Attributter")
+                    attr_id = self.tree.insert(tag_id, 'end', text="📝 Attributes")
                     for attr in tag.attributes:
                         req = "★" if attr.required else ""
                         self.tree.insert(attr_id, 'end', 
@@ -463,9 +463,9 @@ class ReferencesPanel(ttk.Frame):
                                         values=(attr.attr_type, ''),
                                         tags=('attr',))
                 
-                # Tilføj metoder
+                # Add methods
                 if tag.methods:
-                    meth_id = self.tree.insert(tag_id, 'end', text="⚙️ Metoder")
+                    meth_id = self.tree.insert(tag_id, 'end', text="⚙️ Methods")
                     for method in tag.methods:
                         self.tree.insert(meth_id, 'end',
                                         text=method.name,
@@ -473,15 +473,15 @@ class ReferencesPanel(ttk.Frame):
                                         tags=('method',))
     
     def _on_search(self, *args):
-        """Håndter søgning"""
+        """Handle search"""
         self._populate_tree(self.filter_var.get(), self.search_var.get())
     
     def _on_filter(self):
-        """Håndter filter ændring"""
+        """Handle filter change"""
         self._populate_tree(self.filter_var.get(), self.search_var.get())
     
     def _on_select(self, event):
-        """Håndter selection"""
+        """Handle selection"""
         selection = self.tree.selection()
         if not selection:
             return
@@ -489,7 +489,7 @@ class ReferencesPanel(ttk.Frame):
         item = selection[0]
         item_text = self.tree.item(item, 'text')
         
-        # Ryd detaljer
+        # Clear details
         self.details_text.config(state='normal')
         self.details_text.delete('1.0', tk.END)
         
@@ -500,7 +500,7 @@ class ReferencesPanel(ttk.Frame):
             if tag:
                 self._show_tag_details(tag)
         elif item_text.startswith('📝') or item_text.startswith('⚙️'):
-            # Kategori header - vis parent tag
+            # Category header - show parent tag
             parent = self.tree.parent(item)
             if parent:
                 parent_text = self.tree.item(parent, 'text')
@@ -513,7 +513,7 @@ class ReferencesPanel(ttk.Frame):
         self.details_text.config(state='disabled')
     
     def _show_tag_details(self, tag):
-        """Vis detaljer for et tag"""
+        """Show details for a tag"""
         t = self.details_text
         
         # Header
@@ -524,11 +524,11 @@ class ReferencesPanel(ttk.Frame):
         t.insert('end', "Syntax:\n", 'subheader')
         t.insert('end', f"  {tag.syntax}\n\n", 'syntax')
         
-        # Attributter
+        # Attributes
         if tag.attributes:
-            t.insert('end', "Attributter:\n", 'subheader')
+            t.insert('end', "Attributes:\n", 'subheader')
             for attr in tag.attributes:
-                req = " (påkrævet)" if attr.required else ""
+                req = " (required)" if attr.required else ""
                 default = f" = {attr.default}" if attr.default else ""
                 t.insert('end', f"  • {attr.name}", 'attr')
                 t.insert('end', f" : {attr.attr_type}", 'type')
@@ -536,13 +536,13 @@ class ReferencesPanel(ttk.Frame):
                 if attr.description:
                     t.insert('end', f"      {attr.description}\n", 'desc')
                 if attr.accepts_variable:
-                    t.insert('end', f"      ✓ Kan bruge variabel: ", 'desc')
+                    t.insert('end', f"      ✓ Can use variable: ", 'desc')
                     t.insert('end', f"{attr.name}=<var_value>\n", 'example')
             t.insert('end', '\n')
         
-        # Metoder
+        # Methods
         if tag.methods:
-            t.insert('end', "Metoder:\n", 'subheader')
+            t.insert('end', "Methods:\n", 'subheader')
             for method in tag.methods:
                 t.insert('end', f"  • {method.name}\n", 'attr')
                 t.insert('end', f"      {method.syntax}\n", 'syntax')
@@ -552,31 +552,31 @@ class ReferencesPanel(ttk.Frame):
         
         # Accepts references
         if tag.accepts_refs:
-            t.insert('end', "Accepterer referencer fra:\n", 'subheader')
+            t.insert('end', "Accepts references from:\n", 'subheader')
             for ref in tag.accepts_refs:
                 t.insert('end', f"  • {ref}\n", 'desc')
             t.insert('end', '\n')
         
-        # Eksempler
-        t.insert('end', "Eksempler:\n", 'subheader')
+        # Examples
+        t.insert('end', "Examples:\n", 'subheader')
         if tag.tag_type == 'element':
-            t.insert('end', f"  # Opret {tag.name}\n", 'desc')
+            t.insert('end', f"  # Create {tag.name}\n", 'desc')
             t.insert('end', f"  {tag.syntax}\n", 'example')
             if tag.methods:
-                t.insert('end', f"\n  # Brug metoder\n", 'desc')
+                t.insert('end', f"\n  # Use methods\n", 'desc')
                 t.insert('end', f"  <myname_{tag.methods[0].name.split('_')[-1]}>\n", 'example')
         elif tag.tag_type == 'variable':
-            t.insert('end', "  # Definer variabel\n", 'desc')
+            t.insert('end', "  # Define variable\n", 'desc')
             t.insert('end', '  <var name="title" value="Hello">\n', 'example')
-            t.insert('end', "\n  # Brug variabel\n", 'desc')
+            t.insert('end', "\n  # Use variable\n", 'desc')
             t.insert('end', '  <window title=<title_value>>\n', 'example')
     
     def _on_double_click(self, event):
-        """Håndter dobbeltklik - indsæt syntax"""
+        """Handle double-click - insert syntax"""
         self._insert_syntax()
     
     def _copy_syntax(self):
-        """Kopier syntax til clipboard"""
+        """Copy syntax to clipboard"""
         selection = self.tree.selection()
         if not selection:
             return
@@ -590,7 +590,7 @@ class ReferencesPanel(ttk.Frame):
                 self.clipboard_append(tag.syntax)
     
     def _insert_syntax(self):
-        """Indsæt syntax i editor"""
+        """Insert syntax in editor"""
         if not self.editor_callback:
             return
         
@@ -606,37 +606,37 @@ class ReferencesPanel(ttk.Frame):
                 self.editor_callback(tag.syntax)
     
     def _show_ref_syntax(self):
-        """Vis reference syntax info"""
+        """Show reference syntax info"""
         self.details_text.config(state='normal')
         self.details_text.delete('1.0', tk.END)
         
         t = self.details_text
         
         t.insert('end', "Reference Syntax Guide\n", 'header')
-        t.insert('end', "Sådan bruger du referencer i PyTML\n\n", 'desc')
+        t.insert('end', "How to use references in PyTML\n\n", 'desc')
         
         for ref in self.registry.get_reference_syntax():
             t.insert('end', f"{ref['pattern']}\n", 'syntax')
             t.insert('end', f"  {ref['description']}\n", 'desc')
-            t.insert('end', f"  Eksempel: ", 'desc')
+            t.insert('end', f"  Example: ", 'desc')
             t.insert('end', f"{ref['example']}\n", 'example')
-            t.insert('end', f"  Bruges i: {ref['can_use_in']}\n\n", 'desc')
+            t.insert('end', f"  Used in: {ref['can_use_in']}\n\n", 'desc')
         
-        t.insert('end', "\nKombinationer:\n", 'subheader')
-        t.insert('end', "  # Variabel i window title\n", 'desc')
-        t.insert('end', '  <var name="title" value="Min App">\n', 'example')
+        t.insert('end', "\nCombinations:\n", 'subheader')
+        t.insert('end', "  # Variable in window title\n", 'desc')
+        t.insert('end', '  <var name="title" value="My App">\n', 'example')
         t.insert('end', '  <window title=<title_value> name="wnd1">\n\n', 'example')
         
-        t.insert('end', "  # Variabel i button text\n", 'desc')
-        t.insert('end', '  <var name="btn_label" value="Klik!">\n', 'example')
+        t.insert('end', "  # Variable in button text\n", 'desc')
+        t.insert('end', '  <var name="btn_label" value="Click!">\n', 'example')
         t.insert('end', '  <button text=<btn_label_value> parent="wnd1">\n\n', 'example')
         
-        t.insert('end', "  # Dynamisk position\n", 'desc')
+        t.insert('end', "  # Dynamic position\n", 'desc')
         t.insert('end', '  <var name="xpos" value="100">\n', 'example')
         t.insert('end', '  <button x=<xpos_value> y="50">\n\n', 'example')
         
         self.details_text.config(state='disabled')
 
 
-# Eksporter
+# Export
 __all__ = ['ReferencesPanel', 'ReferencesRegistry', 'TagInfo', 'AttributeInfo', 'MethodInfo']

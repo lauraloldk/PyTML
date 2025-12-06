@@ -1,6 +1,6 @@
 """
 PyTML Editor Plugin: Properties Panel
-Dynamisk indlæsning af properties fra lib filer og nodes
+Dynamic loading of properties from lib files and nodes
 """
 
 import tkinter as tk
@@ -12,12 +12,12 @@ import re
 import importlib.util
 import glob
 
-# Tilføj parent directory til path
+# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class PropertyValue:
-    """Repræsenterer en property værdi"""
+    """Represents a property value"""
     
     def __init__(self, name, value, prop_type="string", editable=True, description=""):
         self.name = name
@@ -25,22 +25,22 @@ class PropertyValue:
         self.prop_type = prop_type  # 'string', 'int', 'bool', 'stack', 'color', 'list'
         self.editable = editable
         self.description = description
-        self.on_change = None  # Callback når værdien ændres
+        self.on_change = None  # Callback when value changes
     
     def set_value(self, value):
-        """Sæt værdien"""
+        """Set the value"""
         old_value = self.value
         self.value = value
         if self.on_change and old_value != value:
             self.on_change(self.name, value, old_value)
     
     def get_value(self):
-        """Hent værdien"""
+        """Get the value"""
         return self.value
 
 
 class PropertyGroup:
-    """Gruppe af relaterede properties"""
+    """Group of related properties"""
     
     def __init__(self, name, expanded=True):
         self.name = name
@@ -48,12 +48,12 @@ class PropertyGroup:
         self.properties = []
     
     def add_property(self, prop):
-        """Tilføj en property til gruppen"""
+        """Add a property to the group"""
         self.properties.append(prop)
         return prop
     
     def get_property(self, name):
-        """Hent en property ved navn"""
+        """Get a property by name"""
         for prop in self.properties:
             if prop.name == name:
                 return prop
@@ -61,15 +61,15 @@ class PropertyGroup:
 
 
 class PropertyExtractor:
-    """Udtræk properties dynamisk fra klasser og regex patterns"""
+    """Extract properties dynamically from classes and regex patterns"""
     
     def __init__(self):
-        self.class_properties = {}  # Cache af klasse properties
-        self.syntax_patterns = {}   # Cache af syntax patterns -> properties
+        self.class_properties = {}  # Cache of class properties
+        self.syntax_patterns = {}   # Cache of syntax patterns -> properties
         self._load_all()
     
     def _load_all(self):
-        """Load properties fra alle libs"""
+        """Load properties from all libs"""
         libs_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'libs')
         
         for lib_file in glob.glob(os.path.join(libs_path, '*.py')):
@@ -77,12 +77,12 @@ class PropertyExtractor:
                 continue
             self._load_from_file(lib_file)
         
-        # Load fra Compiler.py
+        # Load from Compiler.py
         compiler_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'Compiler.py')
         self._load_from_file(compiler_path)
     
     def _load_from_file(self, filepath):
-        """Load properties fra en fil"""
+        """Load properties from a file"""
         module_name = os.path.basename(filepath)[:-3]
         
         try:
@@ -90,13 +90,13 @@ class PropertyExtractor:
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             
-            # Udtræk fra klasser
+            # Extract from classes
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if name.startswith('_') or name == 'ActionNode':
                     continue
                 self.class_properties[name] = self._extract_class_properties(cls)
             
-            # Udtræk fra parsers
+            # Extract from parsers
             if hasattr(module, 'get_line_parsers'):
                 for pattern, handler in module.get_line_parsers():
                     props = self._extract_pattern_properties(pattern)
@@ -104,13 +104,13 @@ class PropertyExtractor:
                         self.syntax_patterns[pattern] = props
                         
         except Exception as e:
-            print(f"PropertyExtractor: Kunne ikke loade {filepath}: {e}")
+            print(f"PropertyExtractor: Could not load {filepath}: {e}")
     
     def _extract_class_properties(self, cls):
-        """Udtræk properties fra en klasse"""
+        """Extract properties from a class"""
         properties = []
         
-        # Fra __init__ signatur
+        # From __init__ signature
         try:
             sig = inspect.signature(cls.__init__)
             for param_name, param in sig.parameters.items():
@@ -120,7 +120,7 @@ class PropertyExtractor:
                 prop_type = 'string'
                 default = None
                 
-                # Tjek annotation
+                # Check annotation
                 if param.annotation != inspect.Parameter.empty:
                     ann = str(param.annotation)
                     if 'int' in ann:
@@ -130,7 +130,7 @@ class PropertyExtractor:
                     elif 'list' in ann or 'List' in ann:
                         prop_type = 'list'
                 
-                # Tjek default værdi
+                # Check default value
                 if param.default != inspect.Parameter.empty:
                     default = param.default
                     if isinstance(default, bool):
@@ -149,7 +149,7 @@ class PropertyExtractor:
         except:
             pass
         
-        # Fra klasse attributter
+        # From class attributes
         for attr_name in dir(cls):
             if attr_name.startswith('_'):
                 continue
@@ -176,13 +176,13 @@ class PropertyExtractor:
         return properties
     
     def _extract_pattern_properties(self, pattern):
-        """Udtræk properties fra et regex pattern"""
+        """Extract properties from a regex pattern"""
         properties = []
         
-        # Find navngivne grupper eller standard grupper
-        # F.eks: <window title="([^"]*)" size="(\d+)"
+        # Find named groups or standard groups
+        # E.g: <window title="([^"]*)" size="(\d+)"
         
-        # Find alle attribut navne
+        # Find all attribute names
         attr_pattern = r'(\w+)=["\']\([^)]+\)["\']'
         for match in re.finditer(attr_pattern, pattern):
             attr_name = match.group(1)
@@ -193,7 +193,7 @@ class PropertyExtractor:
                 'editable': True
             })
         
-        # Tjek for specielle patterns
+        # Check for special patterns
         if 'name=' in pattern:
             if not any(p['name'] == 'name' for p in properties):
                 properties.append({'name': 'name', 'type': 'string', 'default': '', 'editable': True})
@@ -217,17 +217,17 @@ class PropertyExtractor:
         return properties
     
     def get_properties_for_class(self, class_name):
-        """Hent properties for en klasse"""
+        """Get properties for a class"""
         return self.class_properties.get(class_name, [])
     
     def get_properties_for_tag(self, tag_name):
-        """Hent properties baseret på tag navn"""
-        # Prøv at matche mod kendte klasser
+        """Get properties based on tag name"""
+        # Try to match against known classes
         class_name = tag_name.title().replace('_', '') + 'Node'
         if class_name in self.class_properties:
             return self.class_properties[class_name]
         
-        # Prøv uden Node suffix
+        # Try without Node suffix
         class_name = tag_name.title().replace('_', '')
         if class_name in self.class_properties:
             return self.class_properties[class_name]
@@ -236,7 +236,7 @@ class PropertyExtractor:
 
 
 class ElementProperties:
-    """Properties for et PyTML element - dynamisk indlæst"""
+    """Properties for a PyTML element - dynamically loaded"""
     
     def __init__(self, element_type, element_name=None, attributes=None):
         self.element_type = element_type
@@ -250,13 +250,13 @@ class ElementProperties:
         self._load_properties()
     
     def _load_properties(self):
-        """Load properties baseret på element type"""
+        """Load properties based on element type"""
         props = self._extractor.get_properties_for_tag(self.element_type)
         
         if props:
             group = PropertyGroup(self.element_type.title())
             for prop_def in props:
-                # Brug eksisterende værdi fra attributes hvis tilgængelig
+                # Use existing value from attributes if available
                 value = self.attributes.get(prop_def['name'], prop_def.get('default', ''))
                 prop = PropertyValue(
                     name=prop_def['name'],
@@ -267,7 +267,7 @@ class ElementProperties:
                 group.add_property(prop)
             self.groups.append(group)
         else:
-            # Fallback: Opret properties fra attributes
+            # Fallback: Create properties from attributes
             if self.attributes:
                 group = PropertyGroup("Attributes")
                 for name, value in self.attributes.items():
@@ -284,22 +284,22 @@ class ElementProperties:
                 self.groups.append(group)
     
     def add_group(self, group):
-        """Tilføj en property gruppe"""
+        """Add a property group"""
         self.groups.append(group)
         return group
     
     def get_all_properties(self):
-        """Hent alle properties"""
+        """Get all properties"""
         props = []
         for group in self.groups:
             props.extend(group.properties)
         return props
     
     def to_pytml(self):
-        """Generer PyTML kode fra properties"""
+        """Generate PyTML code from properties"""
         props = {p.name: p.value for p in self.get_all_properties()}
         
-        # Byg tag
+        # Build tag
         attrs = []
         for name, value in props.items():
             if value is None or value == '':
@@ -319,7 +319,7 @@ class ElementProperties:
         return f'<{self.element_type}>'
     
     def _get_prop_value(self, name):
-        """Hent værdi af en property"""
+        """Get value of a property"""
         for group in self.groups:
             prop = group.get_property(name)
             if prop:
@@ -328,7 +328,7 @@ class ElementProperties:
 
 
 class PropertiesPanel(ttk.Frame):
-    """Panel der viser properties for valgt element - dynamisk"""
+    """Panel showing properties for selected element - dynamic"""
     
     def __init__(self, parent, on_property_change=None):
         super().__init__(parent)
@@ -339,14 +339,14 @@ class PropertiesPanel(ttk.Frame):
         self._setup_ui()
     
     def _setup_ui(self):
-        """Opsæt UI"""
+        """Setup UI"""
         # Header
         header_frame = ttk.Frame(self)
         header_frame.pack(fill=tk.X, padx=5, pady=5)
         
         ttk.Label(header_frame, text="⚙️ Properties", font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT)
         
-        self.element_label = ttk.Label(header_frame, text="(ingen valgt)")
+        self.element_label = ttk.Label(header_frame, text="(none selected)")
         self.element_label.pack(side=tk.RIGHT)
         
         # Separator
@@ -368,40 +368,40 @@ class PropertiesPanel(ttk.Frame):
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Placeholder tekst
-        self.placeholder = ttk.Label(self.scrollable_frame, text="Vælg et element for at se properties")
+        # Placeholder text
+        self.placeholder = ttk.Label(self.scrollable_frame, text="Select an element to see properties")
         self.placeholder.pack(pady=20)
     
     def load_element(self, element):
-        """Load properties for et element"""
+        """Load properties for an element"""
         self.current_element = element
         
-        # Ryd eksisterende widgets
+        # Clear existing widgets
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
         self.property_widgets = {}
         
         if element is None:
-            self.element_label.config(text="(ingen valgt)")
-            self.placeholder = ttk.Label(self.scrollable_frame, text="Vælg et element for at se properties")
+            self.element_label.config(text="(none selected)")
+            self.placeholder = ttk.Label(self.scrollable_frame, text="Select an element to see properties")
             self.placeholder.pack(pady=20)
             return
         
         self.element_label.config(text=f"<{element.element_type}>")
         
-        # Opret widgets for hver gruppe
+        # Create widgets for each group
         for group in element.groups:
             self._create_group(group)
     
     def load_from_line(self, line):
-        """Parse en linje og vis properties"""
+        """Parse a line and show properties"""
         element = parse_line_to_element(line)
         if element:
             self.load_element(element)
     
     def _create_group(self, group):
-        """Opret widgets for en property gruppe"""
-        # Gruppe header
+        """Create widgets for a property group"""
+        # Group header
         group_frame = ttk.LabelFrame(self.scrollable_frame, text=group.name)
         group_frame.pack(fill=tk.X, padx=5, pady=5)
         
@@ -410,14 +410,14 @@ class PropertiesPanel(ttk.Frame):
             self._create_property_widget(group_frame, prop)
     
     def _create_property_widget(self, parent, prop):
-        """Opret widget for en property"""
+        """Create widget for a property"""
         frame = ttk.Frame(parent)
         frame.pack(fill=tk.X, padx=5, pady=2)
         
         # Label
         ttk.Label(frame, text=prop.name, width=12).pack(side=tk.LEFT)
         
-        # Input widget baseret på type
+        # Input widget based on type
         if prop.prop_type == 'bool':
             var = tk.BooleanVar(value=bool(prop.value))
             widget = ttk.Checkbutton(frame, variable=var)
@@ -431,7 +431,7 @@ class PropertiesPanel(ttk.Frame):
             var.trace('w', lambda *args, p=prop, v=var: self._on_int_change(p, v))
         
         elif prop.prop_type == 'stack' or prop.prop_type == 'list':
-            # For stack/list, vis som komma-separeret
+            # For stack/list, show as comma-separated
             val = prop.value
             if isinstance(val, list):
                 val = ', '.join(str(v) for v in val)
@@ -466,13 +466,13 @@ class PropertiesPanel(ttk.Frame):
         self.property_widgets[prop.name] = widget
     
     def _on_string_change(self, prop, var):
-        """Håndter string ændring"""
+        """Handle string change"""
         prop.set_value(var.get())
         if self.on_property_change:
             self.on_property_change(self.current_element, prop)
     
     def _on_int_change(self, prop, var):
-        """Håndter int ændring"""
+        """Handle int change"""
         try:
             prop.set_value(int(var.get()))
         except ValueError:
@@ -481,18 +481,18 @@ class PropertiesPanel(ttk.Frame):
             self.on_property_change(self.current_element, prop)
     
     def _on_bool_change(self, prop, var):
-        """Håndter bool ændring"""
+        """Handle bool change"""
         prop.set_value(var.get())
         if self.on_property_change:
             self.on_property_change(self.current_element, prop)
     
     def _on_list_change(self, prop, var):
-        """Håndter list/stack ændring"""
+        """Handle list/stack change"""
         val = var.get()
-        # Parse komma-separeret liste
+        # Parse comma-separated list
         if val:
             parts = [p.strip() for p in val.split(',')]
-            # Prøv at konvertere til int hvis muligt
+            # Try to convert to int if possible
             try:
                 parts = [int(p) for p in parts]
             except:
@@ -506,7 +506,7 @@ class PropertiesPanel(ttk.Frame):
 
 
 def parse_line_to_element(line):
-    """Parse en PyTML linje og returner ElementProperties"""
+    """Parse a PyTML line and return ElementProperties"""
     line = line.strip()
     if not line.startswith('<'):
         return None
@@ -518,14 +518,14 @@ def parse_line_to_element(line):
     
     tag_type = tag_match.group(1)
     
-    # Udtræk attributter
+    # Extract attributes
     attributes = {}
     
-    # Standard attributter: name="value"
+    # Standard attributes: name="value"
     for match in re.finditer(r'(\w+)="([^"]*)"', line):
         attributes[match.group(1)] = match.group(2)
     
-    # Stack attributter: size="300","350"
+    # Stack attributes: size="300","350"
     stack_match = re.search(r'(\w+)=("[\d,"\s]+"|"\d+")', line)
     if stack_match:
         attr_name = stack_match.group(1)
@@ -537,7 +537,7 @@ def parse_line_to_element(line):
     return ElementProperties(tag_type, attributes=attributes)
 
 
-# Eksporter
+# Export
 __all__ = [
     'PropertyValue',
     'PropertyGroup',

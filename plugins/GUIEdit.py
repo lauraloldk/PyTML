@@ -1,7 +1,7 @@
 """
 PyTML Editor Plugin: GUI Edit Mode
-Dynamisk visuel redigering af GUI elementer fra libs
-Container-baseret med REALTIME synkronisering til kode
+Dynamic visual editing of GUI elements from libs
+Container-based with REALTIME synchronization to code
 """
 
 import tkinter as tk
@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class GUINodeRegistry:
-    """Registry af alle GUI node typer fra libs"""
+    """Registry of all GUI node types from libs"""
     
     def __init__(self):
         self.nodes = {}
@@ -54,7 +54,7 @@ class GUINodeRegistry:
                     self.widgets.append(gui_info)
                     
         except Exception as e:
-            print(f"GUINodeRegistry: Kunne ikke loade {filepath}: {e}")
+            print(f"GUINodeRegistry: Could not load {filepath}: {e}")
     
     def get_containers(self):
         return self.containers
@@ -64,7 +64,7 @@ class GUINodeRegistry:
 
 
 class GUIBlock:
-    """Repræsenterer en <gui>...</gui> block i koden"""
+    """Represents a <gui>...</gui> block in the code"""
     
     def __init__(self, start_line, end_line, content):
         self.start_line = start_line  # 1-indexed
@@ -73,7 +73,7 @@ class GUIBlock:
     
     @staticmethod
     def find_all_blocks(code):
-        """Find alle GUI blocks i koden"""
+        """Find all GUI blocks in the code"""
         blocks = []
         lines = code.split('\n')
         
@@ -97,12 +97,12 @@ class GUIBlock:
         return blocks
     
     def get_label(self):
-        """Generer et label for denne block"""
-        return f"GUI Block (linje {self.start_line}-{self.end_line})"
+        """Generate a label for this block"""
+        return f"GUI Block (line {self.start_line}-{self.end_line})"
 
 
 class GUIElement:
-    """Repræsenterer et GUI element med relativ positionering"""
+    """Represents a GUI element with relative positioning"""
     
     def __init__(self, element_type, name, x=0, y=0, width=100, height=30):
         self.element_type = element_type
@@ -151,7 +151,7 @@ class GUIElement:
                 abs_y <= canvas_y <= abs_y + self.height)
     
     def to_pytml(self):
-        """Generer PyTML kode"""
+        """Generate PyTML code"""
         attrs = [f'name="{self.name}"']
         
         if self.element_type == 'window':
@@ -170,7 +170,7 @@ class GUIElement:
 
 
 class GUICanvas(tk.Canvas):
-    """Canvas til visuel GUI redigering"""
+    """Canvas for visual GUI editing"""
     
     def __init__(self, parent, on_change=None, **kwargs):
         super().__init__(parent, bg='#2d2d2d', highlightthickness=0, **kwargs)
@@ -216,7 +216,7 @@ class GUICanvas(tk.Canvas):
         self._draw_grid()
     
     def _notify_change(self):
-        """Notificer om ændring for realtime sync"""
+        """Notify about change for realtime sync"""
         if self.on_change:
             self.on_change()
     
@@ -427,7 +427,7 @@ class GUICanvas(tk.Canvas):
     
     def _on_release(self, event):
         if self.drag_data.get("element"):
-            self._notify_change()  # Realtime sync efter drag
+            self._notify_change()  # Realtime sync after drag
         self.drag_data = {"x": 0, "y": 0, "element": None}
     
     def clear(self):
@@ -437,7 +437,7 @@ class GUICanvas(tk.Canvas):
         self.selected_element = None
     
     def generate_code(self):
-        """Generer PyTML kode for alle elementer"""
+        """Generate PyTML code for all elements"""
         lines = []
         
         for window in self.windows:
@@ -451,7 +451,7 @@ class GUICanvas(tk.Canvas):
 
 
 class GUIEditPanel(ttk.Frame):
-    """Hovedpanel for GUI redigering med realtime synkronisering"""
+    """Main panel for GUI editing with realtime synchronization"""
     
     def __init__(self, parent, on_code_change=None):
         super().__init__(parent)
@@ -483,12 +483,12 @@ class GUIEditPanel(ttk.Frame):
         self.block_combo.pack(side=tk.LEFT, padx=2)
         self.block_combo.bind('<<ComboboxSelected>>', self._on_block_selected)
         
-        ttk.Button(toolbar, text="➕ Ny Block", command=self._create_new_block).pack(side=tk.LEFT, padx=5)
+        ttk.Button(toolbar, text="➕ New Block", command=self._create_new_block).pack(side=tk.LEFT, padx=5)
         
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
         
-        # Element knapper
-        ttk.Label(toolbar, text="Tilføj:").pack(side=tk.LEFT, padx=5)
+        # Element buttons
+        ttk.Label(toolbar, text="Add:").pack(side=tk.LEFT, padx=5)
         
         for gui_info in self.registry.get_containers():
             icon = gui_info.get('icon', '📦')
@@ -519,7 +519,7 @@ class GUIEditPanel(ttk.Frame):
         self.canvas.on_select = self._on_element_select
         
         # Properties panel
-        props_frame = ttk.LabelFrame(main_pane, text="📝 Valgt Element")
+        props_frame = ttk.LabelFrame(main_pane, text="📝 Selected Element")
         main_pane.add(props_frame, weight=1)
         
         self.props_content = ttk.Frame(props_frame)
@@ -532,7 +532,7 @@ class GUIEditPanel(ttk.Frame):
         info_frame = ttk.Frame(self)
         info_frame.pack(fill=tk.X, pady=5)
         
-        self.info_var = tk.StringVar(value="Tilføj et vindue for at starte • Ændringer synkroniseres automatisk")
+        self.info_var = tk.StringVar(value="Add a window to start • Changes sync automatically")
         ttk.Label(info_frame, textvariable=self.info_var).pack(side=tk.LEFT, padx=5)
         
         self.sync_label = ttk.Label(info_frame, text="🔄 LIVE", foreground='#4ec9b0')
@@ -607,11 +607,11 @@ class GUIEditPanel(ttk.Frame):
         ttk.Label(row, textvariable=self.props_vars['parent'], foreground='#4ec9b0').pack(side=tk.LEFT)
         
         # Delete
-        ttk.Button(self.props_content, text="🗑️ Slet Element", 
+        ttk.Button(self.props_content, text="🗑️ Delete Element", 
                   command=self._delete_selected).pack(fill=tk.X, pady=(10, 0))
     
     def _on_prop_change(self, event=None):
-        """Håndter property ændring med realtime sync"""
+        """Handle property change with realtime sync"""
         element = self.canvas.selected_element
         if not element or self._updating_code:
             return
@@ -647,25 +647,25 @@ class GUIEditPanel(ttk.Frame):
             pass
     
     def _on_canvas_change(self):
-        """Callback når canvas ændres (drag etc)"""
+        """Callback when canvas changes (drag etc)"""
         self._sync_to_code()
-        # Opdater properties panel
+        # Update properties panel
         if self.canvas.selected_element:
             self._update_props_display(self.canvas.selected_element)
     
     def _sync_to_code(self):
-        """Synkroniser canvas til kode i realtime"""
+        """Synchronize canvas to code in realtime"""
         if self._updating_code:
             return
         
         self._updating_code = True
         
         try:
-            # Generer ny kode for GUI block
+            # Generate new code for GUI block
             new_gui_content = self.canvas.generate_code()
             
             if self.gui_blocks and self.active_block_index < len(self.gui_blocks):
-                # Erstat eksisterende block
+                # Replace existing block
                 block = self.gui_blocks[self.active_block_index]
                 lines = self.full_code.split('\n')
                 
@@ -680,8 +680,8 @@ class GUIEditPanel(ttk.Frame):
                 
                 new_code = '\n'.join(new_lines)
             else:
-                # Ingen eksisterende block - tilføj ikke noget
-                # (kun via "Ny Block" knappen)
+                # No existing block - don't add anything
+                # (only via "New Block" button)
                 new_code = self.full_code
             
             if self.on_code_change:
@@ -691,34 +691,34 @@ class GUIEditPanel(ttk.Frame):
             self._updating_code = False
     
     def _create_new_block(self):
-        """Opret en ny GUI block i koden"""
+        """Create a new GUI block in the code"""
         new_block = "\n<gui>\n</gui>\n"
         
-        # Tilføj til slutningen af koden
+        # Add to end of code
         new_code = self.full_code.rstrip() + new_block
         
         if self.on_code_change:
             self.on_code_change(new_code, realtime=True)
         
-        # Reload for at finde den nye block
+        # Reload to find the new block
         self.load_from_code(new_code)
         
-        # Vælg den nye block
+        # Select the new block
         if self.gui_blocks:
             self.active_block_index = len(self.gui_blocks) - 1
             self._update_block_combo()
     
     def _on_block_selected(self, event=None):
-        """Håndter valg af GUI block"""
+        """Handle GUI block selection"""
         selection = self.block_combo.current()
         if selection >= 0 and selection < len(self.gui_blocks):
             self.active_block_index = selection
             self._load_block(self.gui_blocks[selection])
     
     def _update_block_combo(self):
-        """Opdater block combobox"""
+        """Update block combobox"""
         if not self.gui_blocks:
-            self.block_combo['values'] = ['(Ingen GUI blocks)']
+            self.block_combo['values'] = ['(No GUI blocks)']
             self.block_combo.current(0)
         else:
             values = [block.get_label() for block in self.gui_blocks]
@@ -727,7 +727,7 @@ class GUIEditPanel(ttk.Frame):
                 self.block_combo.current(self.active_block_index)
     
     def _load_block(self, block):
-        """Load en specifik GUI block"""
+        """Load a specific GUI block"""
         self.canvas.clear()
         self._element_counter = 0
         self._parse_gui_content(block.content)
@@ -752,7 +752,7 @@ class GUIEditPanel(ttk.Frame):
         self.canvas.redraw_all()
         self._clear_props()
         self._sync_to_code()
-        self.info_var.set("Element slettet")
+        self.info_var.set("Element deleted")
     
     def _clear_props(self):
         for var in self.props_vars.values():
@@ -772,11 +772,11 @@ class GUIEditPanel(ttk.Frame):
         
         self.canvas.add_window(element)
         self._sync_to_code()
-        self.info_var.set(f"Tilføjet vindue: {name}")
+        self.info_var.set(f"Added window: {name}")
     
     def _add_widget(self, gui_info):
         if not self.canvas.windows:
-            self.info_var.set("⚠️ Tilføj et vindue først!")
+            self.info_var.set("⚠️ Add a window first!")
             return
         
         parent = self.canvas.windows[-1]
@@ -795,22 +795,22 @@ class GUIEditPanel(ttk.Frame):
         if category in ('button', 'label'):
             element.set_property('text', gui_info.get('display_name', category.title()))
         elif category == 'entry':
-            element.set_property('placeholder', 'Indtast tekst...')
+            element.set_property('placeholder', 'Enter text...')
         
         self.canvas.add_widget(element, parent)
         self._sync_to_code()
-        self.info_var.set(f"Tilføjet {category} til {parent.name}")
+        self.info_var.set(f"Added {category} to {parent.name}")
     
     def _on_element_select(self, element):
         if element:
             self._update_props_display(element)
-            self.info_var.set(f"Valgt: {element.element_type} '{element.name}'")
+            self.info_var.set(f"Selected: {element.element_type} '{element.name}'")
         else:
             self._clear_props()
-            self.info_var.set("Klik på et element for at vælge")
+            self.info_var.set("Click on an element to select")
     
     def _update_props_display(self, element):
-        """Opdater properties display uden at trigger sync"""
+        """Update properties display without triggering sync"""
         self._updating_code = True
         try:
             self.props_vars['type'].set(f"<{element.element_type}>")
@@ -830,29 +830,29 @@ class GUIEditPanel(ttk.Frame):
             self._updating_code = False
     
     def load_from_code(self, code):
-        """Load GUI elementer fra PyTML kode"""
+        """Load GUI elements from PyTML code"""
         self.full_code = code
         self._updating_code = True
         
         try:
-            # Find alle GUI blocks
+            # Find all GUI blocks
             self.gui_blocks = GUIBlock.find_all_blocks(code)
             self._update_block_combo()
             
-            # Load første block hvis der er nogen
+            # Load first block if any
             if self.gui_blocks:
                 self.active_block_index = 0
                 self._load_block(self.gui_blocks[0])
                 self.info_var.set(f"Loaded {len(self.gui_blocks)} GUI block(s)")
             else:
                 self.canvas.clear()
-                self.info_var.set("Ingen GUI blocks fundet. Klik '➕ Ny Block' for at starte.")
+                self.info_var.set("No GUI blocks found. Click '➕ New Block' to start.")
         
         finally:
             self._updating_code = False
     
     def _parse_gui_content(self, content):
-        """Parse GUI content og opret elementer"""
+        """Parse GUI content and create elements"""
         windows_by_name = {}
         
         # Parse windows

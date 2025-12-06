@@ -1,6 +1,6 @@
 """
 PyTML Editor Plugin: Objects Panel
-Dynamisk indlæsning af objekter fra lib filer og compiler nodes
+Dynamic loading of objects from lib files and compiler nodes
 """
 
 import tkinter as tk
@@ -12,12 +12,12 @@ import re
 import importlib.util
 import glob
 
-# Tilføj parent directory til path
+# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class ObjectInfo:
-    """Information om et PyTML objekt"""
+    """Information about a PyTML object"""
     
     def __init__(self, name, obj_type, module, description=""):
         self.name = name
@@ -30,7 +30,7 @@ class ObjectInfo:
         self.signature = ""
     
     def add_property(self, name, prop_type, description=""):
-        """Tilføj en property"""
+        """Add a property"""
         self.properties.append({
             'name': name,
             'type': prop_type,
@@ -38,7 +38,7 @@ class ObjectInfo:
         })
     
     def add_method(self, name, signature, description=""):
-        """Tilføj en metode"""
+        """Add a method"""
         self.methods.append({
             'name': name,
             'signature': signature,
@@ -47,50 +47,50 @@ class ObjectInfo:
 
 
 class ObjectLibrary:
-    """Dynamisk samling af alle PyTML objekter fra libs"""
+    """Dynamic collection of all PyTML objects from libs"""
     
     def __init__(self):
         self.objects = {}
         self.categories = {}
-        self.parsers = []  # Liste af (pattern, syntax_example)
+        self.parsers = []  # List of (pattern, syntax_example)
     
     def load_from_libs(self):
-        """Load alle objekter dynamisk fra lib filer"""
+        """Load all objects dynamically from lib files"""
         self.objects = {}
         self.categories = {}
         self.parsers = []
         
         libs_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'libs')
         
-        # Find alle python filer i libs mappen
+        # Find all python files in libs folder
         for lib_file in glob.glob(os.path.join(libs_path, '*.py')):
             if lib_file.endswith('__init__.py'):
                 continue
             self._load_lib_file(lib_file)
         
-        # Load fra Compiler.py
+        # Load from Compiler.py
         self._load_compiler_objects()
     
     def _load_lib_file(self, filepath):
-        """Load objekter fra en enkelt lib fil"""
-        module_name = os.path.basename(filepath)[:-3]  # Fjern .py
+        """Load objects from a single lib file"""
+        module_name = os.path.basename(filepath)[:-3]  # Remove .py
         category = module_name.replace('_', ' ').title()
         
         if category not in self.categories:
             self.categories[category] = []
         
         try:
-            # Dynamisk import
+            # Dynamic import
             spec = importlib.util.spec_from_file_location(module_name, filepath)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             
-            # Find alle klasser
+            # Find all classes
             for name, obj in inspect.getmembers(module, inspect.isclass):
                 if name.startswith('_'):
                     continue
                 
-                # Spring ActionNode base klassen over (den er duplikeret i hver fil)
+                # Skip ActionNode base class (duplicated in each file)
                 if name == 'ActionNode' and module_name != 'compiler':
                     continue
                 
@@ -99,7 +99,7 @@ class ObjectLibrary:
                     self.objects[f"{module_name}.{name}"] = info
                     self.categories[category].append(info)
             
-            # Find line parsers hvis de findes
+            # Find line parsers if they exist
             if hasattr(module, 'get_line_parsers'):
                 parsers = module.get_line_parsers()
                 for pattern, handler in parsers:
@@ -108,21 +108,21 @@ class ObjectLibrary:
                         name=syntax,
                         obj_type='syntax',
                         module=module_name,
-                        description=handler.__doc__ or f"Parser fra {module_name}"
+                        description=handler.__doc__ or f"Parser from {module_name}"
                     )
                     parser_info.syntax = syntax
                     self.parsers.append((pattern, syntax))
                     
-                    # Tilføj som objekt
+                    # Add as object
                     key = f"{module_name}.parser.{len(self.parsers)}"
                     self.objects[key] = parser_info
                     self.categories[category].append(parser_info)
                     
         except Exception as e:
-            print(f"Kunne ikke loade {filepath}: {e}")
+            print(f"Could not load {filepath}: {e}")
     
     def _load_compiler_objects(self):
-        """Load objekter fra Compiler.py"""
+        """Load objects from Compiler.py"""
         compiler_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'Compiler.py')
         
         if 'Control Flow' not in self.categories:
@@ -133,7 +133,7 @@ class ObjectLibrary:
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             
-            # Find node klasser
+            # Find node classes
             for name in ['ActionNode', 'BlockNode', 'IfNode', 'LoopNode']:
                 if hasattr(module, name):
                     obj = getattr(module, name)
@@ -143,18 +143,18 @@ class ObjectLibrary:
                         self.categories['Control Flow'].append(info)
                         
         except Exception as e:
-            print(f"Kunne ikke loade Compiler.py: {e}")
+            print(f"Could not load Compiler.py: {e}")
     
     def _extract_class_info(self, name, cls, module_name, filepath):
-        """Udtræk information fra en klasse"""
+        """Extract information from a class"""
         info = ObjectInfo(
             name=name,
             obj_type='node' if 'Node' in name else 'class',
             module=module_name,
-            description=cls.__doc__ or f"Klasse fra {module_name}"
+            description=cls.__doc__ or f"Class from {module_name}"
         )
         
-        # Udtræk properties fra __init__
+        # Extract properties from __init__
         try:
             init_sig = inspect.signature(cls.__init__)
             params = []
@@ -170,7 +170,7 @@ class ObjectLibrary:
         except:
             pass
         
-        # Udtræk metoder
+        # Extract methods
         for method_name, method in inspect.getmembers(cls, predicate=inspect.isfunction):
             if method_name.startswith('_'):
                 continue
@@ -181,14 +181,14 @@ class ObjectLibrary:
             except:
                 info.add_method(method_name, "()", "")
         
-        # Generer syntax eksempel baseret på klasse navn
+        # Generate syntax example based on class name
         info.syntax = self._generate_syntax_example(name, info.properties)
         
         return info
     
     def _pattern_to_syntax(self, pattern):
-        """Konverter regex pattern til læsbar syntax"""
-        # Erstat regex grupper med placeholders
+        """Convert regex pattern to readable syntax"""
+        # Replace regex groups with placeholders
         syntax = pattern
         syntax = re.sub(r'\(\?:([^)]+)\)', r'\1', syntax)  # Non-capturing groups
         syntax = re.sub(r'\(\\w\+\)', 'name', syntax)
@@ -201,13 +201,13 @@ class ObjectLibrary:
         return syntax
     
     def _generate_syntax_example(self, class_name, properties):
-        """Generer syntax eksempel baseret på klasse"""
+        """Generate syntax example based on class"""
         name_lower = class_name.lower().replace('node', '').replace('action', '')
         
         if not name_lower:
             return ""
         
-        # Byg attributter
+        # Build attributes
         attrs = []
         for prop in properties:
             if prop['name'] in ('tag_name', 'attributes', 'children', 'parent'):
@@ -219,15 +219,15 @@ class ObjectLibrary:
         return f'<{name_lower}>'
     
     def get_by_category(self, category):
-        """Hent objekter i en kategori"""
+        """Get objects in a category"""
         return self.categories.get(category, [])
     
     def get_all(self):
-        """Hent alle objekter"""
+        """Get all objects"""
         return list(self.objects.values())
     
     def get_all_syntax(self):
-        """Hent alle syntax eksempler"""
+        """Get all syntax examples"""
         syntax_list = []
         for obj in self.objects.values():
             if obj.syntax:
@@ -240,7 +240,7 @@ class ObjectLibrary:
         return syntax_list
     
     def search(self, query):
-        """Søg efter objekter"""
+        """Search for objects"""
         query = query.lower()
         results = []
         for obj in self.objects.values():
@@ -252,11 +252,11 @@ class ObjectLibrary:
 
 
 class ObjectsPanel(ttk.Frame):
-    """Panel der viser tilgængelige PyTML objekter"""
+    """Panel showing available PyTML objects"""
     
     def __init__(self, parent, editor_callback=None):
         super().__init__(parent)
-        self.editor_callback = editor_callback  # Callback til at indsætte kode i editor
+        self.editor_callback = editor_callback  # Callback to insert code in editor
         
         self.library = ObjectLibrary()
         self.library.load_from_libs()
@@ -264,8 +264,8 @@ class ObjectsPanel(ttk.Frame):
         self._setup_ui()
     
     def _setup_ui(self):
-        """Opsæt UI"""
-        # Søgefelt
+        """Setup UI"""
+        # Search field
         search_frame = ttk.Frame(self)
         search_frame.pack(fill=tk.X, padx=5, pady=5)
         
@@ -275,15 +275,15 @@ class ObjectsPanel(ttk.Frame):
         self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
         self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         
-        # Refresh knap
+        # Refresh button
         ttk.Button(search_frame, text="🔄", width=3, command=self._refresh).pack(side=tk.RIGHT)
         
-        # Treeview med objekter
+        # Treeview with objects
         tree_frame = ttk.Frame(self)
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.tree = ttk.Treeview(tree_frame, columns=('Type', 'Syntax'), show='tree headings')
-        self.tree.heading('#0', text='Objekt')
+        self.tree.heading('#0', text='Object')
         self.tree.heading('Type', text='Type')
         self.tree.heading('Syntax', text='Syntax')
         self.tree.column('#0', width=120)
@@ -309,25 +309,25 @@ class ObjectsPanel(ttk.Frame):
         self.info_text = tk.Text(self, height=4, wrap=tk.WORD, bg='#2d2d2d', fg='#d4d4d4')
         self.info_text.pack(fill=tk.X, padx=5, pady=5)
         
-        # Insert knap
-        ttk.Button(self, text="📥 Indsæt i Editor", command=self._insert_selected).pack(pady=5)
+        # Insert button
+        ttk.Button(self, text="📥 Insert in Editor", command=self._insert_selected).pack(pady=5)
         
-        # Load objekter
+        # Load objects
         self._populate_tree()
     
     def _refresh(self):
-        """Genindlæs objekter fra libs"""
+        """Reload objects from libs"""
         self.library.load_from_libs()
         self._populate_tree()
     
     def _populate_tree(self, objects=None):
-        """Fyld tree med objekter"""
-        # Ryd eksisterende
+        """Fill tree with objects"""
+        # Clear existing
         for item in self.tree.get_children():
             self.tree.delete(item)
         
         if objects is None:
-            # Vis efter kategori
+            # Show by category
             for category, objs in sorted(self.library.categories.items()):
                 if objs:
                     cat_id = self.tree.insert('', 'end', text=f"📁 {category}", open=False)
@@ -337,7 +337,7 @@ class ObjectsPanel(ttk.Frame):
                                         values=(obj.obj_type, syntax_short),
                                         tags=(obj.name,))
         else:
-            # Vis søgeresultater
+            # Show search results
             for obj in objects:
                 syntax_short = obj.syntax[:40] + '...' if len(obj.syntax) > 40 else obj.syntax
                 self.tree.insert('', 'end', text=obj.name,
@@ -345,7 +345,7 @@ class ObjectsPanel(ttk.Frame):
                                 tags=(obj.name,))
     
     def _on_search(self, *args):
-        """Håndter søgning"""
+        """Handle search"""
         query = self.search_var.get()
         if query:
             results = self.library.search(query)
@@ -354,7 +354,7 @@ class ObjectsPanel(ttk.Frame):
             self._populate_tree()
     
     def _on_select(self, event):
-        """Vis info om valgt objekt"""
+        """Show info about selected object"""
         selection = self.tree.selection()
         if not selection:
             return
@@ -362,14 +362,14 @@ class ObjectsPanel(ttk.Frame):
         item = selection[0]
         item_text = self.tree.item(item, 'text')
         
-        # Find objektet
+        # Find the object
         for obj in self.library.objects.values():
             if obj.name == item_text:
                 self._show_info(obj)
                 break
     
     def _show_info(self, obj):
-        """Vis information om et objekt"""
+        """Show information about an object"""
         self.info_text.delete('1.0', tk.END)
         
         info = f"📦 {obj.name} ({obj.obj_type})\n"
@@ -382,11 +382,11 @@ class ObjectsPanel(ttk.Frame):
         self.info_text.insert('1.0', info)
     
     def _on_double_click(self, event):
-        """Håndter double-click"""
+        """Handle double-click"""
         self._insert_selected()
     
     def _insert_selected(self):
-        """Indsæt valgt objekt i editor"""
+        """Insert selected object in editor"""
         selection = self.tree.selection()
         if not selection:
             return
@@ -394,7 +394,7 @@ class ObjectsPanel(ttk.Frame):
         item = selection[0]
         item_text = self.tree.item(item, 'text')
         
-        # Find objektet
+        # Find the object
         for obj in self.library.objects.values():
             if obj.name == item_text and obj.syntax:
                 if self.editor_callback:
@@ -402,5 +402,5 @@ class ObjectsPanel(ttk.Frame):
                 break
 
 
-# Eksporter
+# Export
 __all__ = ['ObjectInfo', 'ObjectLibrary', 'ObjectsPanel']
