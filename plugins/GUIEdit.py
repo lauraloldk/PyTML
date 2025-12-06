@@ -1,0 +1,919 @@
+"""
+PyTML Editor Plugin: GUI Edit Mode
+Dynamisk visuel redigering af GUI elementer fra libs
+Container-baseret med REALTIME synkronisering til kode
+"""
+
+import tkinter as tk
+from tkinter import ttk
+import re
+import sys
+import os
+import glob
+import importlib.util
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+class GUINodeRegistry:
+    """Registry af alle GUI node typer fra libs"""
+    
+    def __init__(self):
+        self.nodes = {}
+        self.containers = []
+        self.widgets = []
+    
+    def load_from_libs(self):
+        self.nodes = {}
+        self.containers = []
+        self.widgets = []
+        
+        libs_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'libs')
+        
+        for lib_file in glob.glob(os.path.join(libs_path, '*.py')):
+            if lib_file.endswith('__init__.py'):
+                continue
+            self._load_from_lib(lib_file)
+    
+    def _load_from_lib(self, filepath):
+        module_name = os.path.basename(filepath)[:-3]
+        
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, filepath)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            
+            if hasattr(module, 'get_gui_info'):
+                gui_info = module.get_gui_info()
+                category = gui_info.get('category', module_name)
+                self.nodes[category] = gui_info
+                
+                if gui_info.get('type') == 'container':
+                    self.containers.append(gui_info)
+                else:
+                    self.widgets.append(gui_info)
+                    
+        except Exception as e:
+            print(f"GUINodeRegistry: Kunne ikke loade {filepath}: {e}")
+    
+    def get_containers(self):
+        return self.containers
+    
+    def get_widgets(self):
+        return self.widgets
+
+
+class GUIBlock:
+    """Repræsenterer en <gui>...</gui> block i koden"""
+    
+    def __init__(self, start_line, end_line, content):
+        self.start_line = start_line  # 1-indexed
+        self.end_line = end_line      # 1-indexed
+        self.content = content
+    
+    @staticmethod
+    def find_all_blocks(code):
+        """Find alle GUI blocks i koden"""
+        blocks = []
+        lines = code.split('\n')
+        
+        in_block = False
+        block_start = 0
+        block_content = []
+        
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            
+            if stripped == '<gui>':
+                in_block = True
+                block_start = i
+                block_content = []
+            elif stripped == '</gui>' and in_block:
+                blocks.append(GUIBlock(block_start, i, '\n'.join(block_content)))
+                in_block = False
+            elif in_block:
+                block_content.append(line)
+        
+        return blocks
+    
+    def get_label(self):
+        """Generer et label for denne block"""
+        return f"GUI Block (linje {self.start_line}-{self.end_line})"
+
+
+class GUIElement:
+    """Repræsenterer et GUI element med relativ positionering"""
+    
+    def __init__(self, element_type, name, x=0, y=0, width=100, height=30):
+        self.element_type = element_type
+        self.name = name
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.properties = {}
+        self.children = []
+        self.parent = None
+        self.selected = False
+    
+    def set_property(self, name, value):
+        self.properties[name] = value
+    
+    def get_property(self, name, default=None):
+        return self.properties.get(name, default)
+    
+    def add_child(self, child):
+        child.parent = self
+        if child not in self.children:
+            self.children.append(child)
+    
+    def remove_child(self, child):
+        if child in self.children:
+            self.children.remove(child)
+            child.parent = None
+    
+    def get_absolute_position(self):
+        abs_x = self.x
+        abs_y = self.y
+        
+        if self.parent:
+            parent_x, parent_y = self.parent.get_absolute_position()
+            abs_x += parent_x
+            abs_y += parent_y
+            if self.parent.element_type == 'window':
+                abs_y += 30
+        
+        return abs_x, abs_y
+    
+    def contains_point(self, canvas_x, canvas_y):
+        abs_x, abs_y = self.get_absolute_position()
+        return (abs_x <= canvas_x <= abs_x + self.width and 
+                abs_y <= canvas_y <= abs_y + self.height)
+    
+    def to_pytml(self):
+        """Generer PyTML kode"""
+        attrs = [f'name="{self.name}"']
+        
+        if self.element_type == 'window':
+            title = self.get_property('title', 'Window')
+            attrs.insert(0, f'title="{title}"')
+            attrs.append(f'size="{self.width}","{self.height}"')
+        else:
+            if 'text' in self.properties:
+                attrs.insert(0, f'text="{self.properties["text"]}"')
+            if self.parent:
+                attrs.append(f'parent="{self.parent.name}"')
+            attrs.append(f'x="{self.x}"')
+            attrs.append(f'y="{self.y}"')
+        
+        return f'<{self.element_type} {" ".join(attrs)}>'
+
+
+class GUICanvas(tk.Canvas):
+    """Canvas til visuel GUI redigering"""
+    
+    def __init__(self, parent, on_change=None, **kwargs):
+        super().__init__(parent, bg='#2d2d2d', highlightthickness=0, **kwargs)
+        
+        self.windows = []
+        self.all_elements = {}
+        self.selected_element = None
+        self.drag_data = {"x": 0, "y": 0, "element": None}
+        self.on_select = None
+        self.on_change = on_change  # Callback for realtime updates
+        self.registry = GUINodeRegistry()
+        self.registry.load_from_libs()
+        
+        self.grid_size = 10
+        
+        self.colors = {
+            'window': {'bg': '#3c3c3c', 'border': '#569cd6', 'titlebar': '#252526'},
+            'button': {'bg': '#0e639c', 'border': '#0e639c', 'text': '#ffffff'},
+            'label': {'bg': 'transparent', 'border': '#dcdcaa', 'text': '#dcdcaa'},
+            'entry': {'bg': '#3c3c3c', 'border': '#858585', 'text': '#d4d4d4'},
+        }
+        
+        self.bind('<Button-1>', self._on_click)
+        self.bind('<B1-Motion>', self._on_drag)
+        self.bind('<ButtonRelease-1>', self._on_release)
+        self.bind('<Configure>', self._on_resize)
+        
+        self._draw_grid()
+    
+    def _draw_grid(self):
+        self.delete('grid')
+        width = self.winfo_width() or 800
+        height = self.winfo_height() or 600
+        
+        for x in range(0, width, self.grid_size * 2):
+            self.create_line(x, 0, x, height, fill='#383838', tags='grid')
+        for y in range(0, height, self.grid_size * 2):
+            self.create_line(0, y, width, y, fill='#383838', tags='grid')
+        
+        self.tag_lower('grid')
+    
+    def _on_resize(self, event):
+        self._draw_grid()
+    
+    def _notify_change(self):
+        """Notificer om ændring for realtime sync"""
+        if self.on_change:
+            self.on_change()
+    
+    def add_window(self, element):
+        self.windows.append(element)
+        self.all_elements[element.name] = element
+        self._draw_window(element)
+        return element
+    
+    def add_widget(self, element, parent_window):
+        if parent_window:
+            parent_window.add_child(element)
+        self.all_elements[element.name] = element
+        self._draw_widget(element)
+        return element
+    
+    def _draw_window(self, window):
+        tag = f"window_{window.name}"
+        self.delete(tag)
+        
+        abs_x, abs_y = window.get_absolute_position()
+        colors = self.colors['window']
+        
+        border_color = '#ff6b6b' if window.selected else colors['border']
+        border_width = 3 if window.selected else 2
+        
+        self.create_rectangle(
+            abs_x, abs_y, abs_x + window.width, abs_y + window.height,
+            fill=colors['bg'], outline=border_color, width=border_width,
+            tags=(tag, 'window', 'element')
+        )
+        
+        self.create_rectangle(
+            abs_x, abs_y, abs_x + window.width, abs_y + 30,
+            fill=colors['titlebar'], outline='',
+            tags=(tag, 'window', 'element')
+        )
+        
+        title = window.get_property('title', window.name)
+        self.create_text(
+            abs_x + 10, abs_y + 15,
+            text=f"🪟 {title}", fill='#cccccc', font=('Segoe UI', 9, 'bold'),
+            anchor='w', tags=(tag, 'window', 'element')
+        )
+        
+        self.create_text(
+            abs_x + window.width - 10, abs_y + 15,
+            text=f"{window.width}x{window.height}", fill='#808080', font=('Consolas', 8),
+            anchor='e', tags=(tag, 'window', 'element')
+        )
+        
+        self.create_rectangle(
+            abs_x + 2, abs_y + 32,
+            abs_x + window.width - 2, abs_y + window.height - 2,
+            fill='', outline='#4a4a4a', dash=(2, 2),
+            tags=(tag, 'window', 'element')
+        )
+        
+        for child in window.children:
+            self._draw_widget(child)
+        
+        self._raise_window_children(window)
+    
+    def _draw_widget(self, widget):
+        tag = f"widget_{widget.name}"
+        self.delete(tag)
+        
+        abs_x, abs_y = widget.get_absolute_position()
+        colors = self.colors.get(widget.element_type, self.colors['button'])
+        
+        border_color = '#ff6b6b' if widget.selected else colors['border']
+        border_width = 2 if widget.selected else 1
+        
+        if widget.element_type == 'button':
+            self.create_rectangle(
+                abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
+                fill=colors['bg'], outline=border_color, width=border_width,
+                tags=(tag, 'widget', 'element')
+            )
+            text = widget.get_property('text', widget.name)
+            self.create_text(
+                abs_x + widget.width // 2, abs_y + widget.height // 2,
+                text=text, fill=colors['text'], font=('Segoe UI', 9),
+                tags=(tag, 'widget', 'element')
+            )
+            
+        elif widget.element_type == 'label':
+            text = widget.get_property('text', widget.name)
+            self.create_text(
+                abs_x, abs_y + widget.height // 2,
+                text=text, fill=colors['text'], font=('Segoe UI', 9),
+                anchor='w', tags=(tag, 'widget', 'element')
+            )
+            if widget.selected:
+                self.create_rectangle(
+                    abs_x - 2, abs_y, abs_x + widget.width + 2, abs_y + widget.height,
+                    fill='', outline=border_color, width=border_width, dash=(2, 2),
+                    tags=(tag, 'widget', 'element')
+                )
+                
+        elif widget.element_type == 'entry':
+            self.create_rectangle(
+                abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
+                fill=colors['bg'], outline=border_color, width=border_width,
+                tags=(tag, 'widget', 'element')
+            )
+            placeholder = widget.get_property('placeholder', 'Input...')
+            self.create_text(
+                abs_x + 5, abs_y + widget.height // 2,
+                text=placeholder, fill='#808080', font=('Segoe UI', 9),
+                anchor='w', tags=(tag, 'widget', 'element')
+            )
+        
+        self.create_text(
+            abs_x + widget.width // 2, abs_y + widget.height + 8,
+            text=f"({widget.x}, {widget.y})", fill='#606060', font=('Consolas', 7),
+            tags=(tag, 'widget', 'element')
+        )
+    
+    def _raise_window_children(self, window):
+        for child in window.children:
+            tag = f"widget_{child.name}"
+            self.tag_raise(tag)
+    
+    def redraw_all(self):
+        self.delete('element')
+        for window in self.windows:
+            self._draw_window(window)
+    
+    def _find_element_at(self, x, y):
+        for window in reversed(self.windows):
+            for child in reversed(window.children):
+                if child.contains_point(x, y):
+                    return child
+        
+        for window in reversed(self.windows):
+            if window.contains_point(x, y):
+                return window
+        
+        return None
+    
+    def _on_click(self, event):
+        clicked = self._find_element_at(event.x, event.y)
+        
+        if self.selected_element:
+            self.selected_element.selected = False
+        
+        self.selected_element = clicked
+        
+        if clicked:
+            clicked.selected = True
+            
+            abs_x, abs_y = clicked.get_absolute_position()
+            self.drag_data = {
+                "x": event.x - abs_x,
+                "y": event.y - abs_y,
+                "element": clicked
+            }
+            
+            if clicked.parent:
+                self._bring_window_to_front(clicked.parent)
+            elif clicked.element_type == 'window':
+                self._bring_window_to_front(clicked)
+        else:
+            self.drag_data = {"x": 0, "y": 0, "element": None}
+        
+        self.redraw_all()
+        
+        if self.on_select:
+            self.on_select(clicked)
+    
+    def _bring_window_to_front(self, window):
+        if window in self.windows:
+            self.windows.remove(window)
+            self.windows.append(window)
+    
+    def _on_drag(self, event):
+        element = self.drag_data.get("element")
+        if not element:
+            return
+        
+        if element.element_type == 'window':
+            new_x = round((event.x - self.drag_data["x"]) / self.grid_size) * self.grid_size
+            new_y = round((event.y - self.drag_data["y"]) / self.grid_size) * self.grid_size
+            element.x = max(0, new_x)
+            element.y = max(0, new_y)
+        else:
+            if element.parent:
+                parent_x, parent_y = element.parent.get_absolute_position()
+                titlebar_offset = 30 if element.parent.element_type == 'window' else 0
+                
+                new_abs_x = event.x - self.drag_data["x"]
+                new_abs_y = event.y - self.drag_data["y"]
+                
+                new_rel_x = new_abs_x - parent_x
+                new_rel_y = new_abs_y - parent_y - titlebar_offset
+                
+                new_rel_x = round(new_rel_x / self.grid_size) * self.grid_size
+                new_rel_y = round(new_rel_y / self.grid_size) * self.grid_size
+                
+                new_rel_x = max(0, min(new_rel_x, element.parent.width - element.width))
+                new_rel_y = max(0, min(new_rel_y, element.parent.height - titlebar_offset - element.height))
+                
+                element.x = new_rel_x
+                element.y = new_rel_y
+        
+        self.redraw_all()
+    
+    def _on_release(self, event):
+        if self.drag_data.get("element"):
+            self._notify_change()  # Realtime sync efter drag
+        self.drag_data = {"x": 0, "y": 0, "element": None}
+    
+    def clear(self):
+        self.delete('element')
+        self.windows = []
+        self.all_elements = {}
+        self.selected_element = None
+    
+    def generate_code(self):
+        """Generer PyTML kode for alle elementer"""
+        lines = []
+        
+        for window in self.windows:
+            lines.append(window.to_pytml())
+            lines.append(f"<{window.name}_show>")
+            
+            for child in window.children:
+                lines.append(child.to_pytml())
+        
+        return '\n'.join(lines)
+
+
+class GUIEditPanel(ttk.Frame):
+    """Hovedpanel for GUI redigering med realtime synkronisering"""
+    
+    def __init__(self, parent, on_code_change=None):
+        super().__init__(parent)
+        self.on_code_change = on_code_change
+        self.registry = GUINodeRegistry()
+        self.registry.load_from_libs()
+        self._element_counter = 0
+        
+        # GUI block tracking
+        self.gui_blocks = []
+        self.active_block_index = 0
+        self.full_code = ""
+        self._updating_code = False  # Prevent recursion
+        
+        self._setup_ui()
+    
+    def _setup_ui(self):
+        # Top toolbar
+        toolbar = ttk.Frame(self)
+        toolbar.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(toolbar, text="🎨 GUI Edit", font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT)
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+        
+        # Block selector
+        ttk.Label(toolbar, text="Block:").pack(side=tk.LEFT, padx=5)
+        self.block_var = tk.StringVar()
+        self.block_combo = ttk.Combobox(toolbar, textvariable=self.block_var, state='readonly', width=25)
+        self.block_combo.pack(side=tk.LEFT, padx=2)
+        self.block_combo.bind('<<ComboboxSelected>>', self._on_block_selected)
+        
+        ttk.Button(toolbar, text="➕ Ny Block", command=self._create_new_block).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+        
+        # Element knapper
+        ttk.Label(toolbar, text="Tilføj:").pack(side=tk.LEFT, padx=5)
+        
+        for gui_info in self.registry.get_containers():
+            icon = gui_info.get('icon', '📦')
+            name = gui_info.get('display_name', gui_info['category'])
+            btn = ttk.Button(toolbar, text=f"{icon} {name}", 
+                           command=lambda g=gui_info: self._add_container(g))
+            btn.pack(side=tk.LEFT, padx=2)
+        
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=5, fill=tk.Y)
+        
+        for gui_info in self.registry.get_widgets():
+            icon = gui_info.get('icon', '📦')
+            name = gui_info.get('display_name', gui_info['category'])
+            btn = ttk.Button(toolbar, text=f"{icon} {name}",
+                           command=lambda g=gui_info: self._add_widget(g))
+            btn.pack(side=tk.LEFT, padx=2)
+        
+        # Main area
+        main_pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
+        main_pane.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Canvas
+        canvas_frame = ttk.Frame(main_pane)
+        main_pane.add(canvas_frame, weight=3)
+        
+        self.canvas = GUICanvas(canvas_frame, on_change=self._on_canvas_change)
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.canvas.on_select = self._on_element_select
+        
+        # Properties panel
+        props_frame = ttk.LabelFrame(main_pane, text="📝 Valgt Element")
+        main_pane.add(props_frame, weight=1)
+        
+        self.props_content = ttk.Frame(props_frame)
+        self.props_content.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        self.props_vars = {}
+        self._setup_props_panel()
+        
+        # Info bar
+        info_frame = ttk.Frame(self)
+        info_frame.pack(fill=tk.X, pady=5)
+        
+        self.info_var = tk.StringVar(value="Tilføj et vindue for at starte • Ændringer synkroniseres automatisk")
+        ttk.Label(info_frame, textvariable=self.info_var).pack(side=tk.LEFT, padx=5)
+        
+        self.sync_label = ttk.Label(info_frame, text="🔄 LIVE", foreground='#4ec9b0')
+        self.sync_label.pack(side=tk.RIGHT, padx=5)
+    
+    def _setup_props_panel(self):
+        for widget in self.props_content.winfo_children():
+            widget.destroy()
+        
+        self.props_vars = {}
+        
+        # Type
+        row = ttk.Frame(self.props_content)
+        row.pack(fill=tk.X, pady=2)
+        ttk.Label(row, text="Type:", width=10).pack(side=tk.LEFT)
+        self.props_vars['type'] = tk.StringVar()
+        ttk.Label(row, textvariable=self.props_vars['type'], foreground='#569cd6').pack(side=tk.LEFT)
+        
+        # Name
+        row = ttk.Frame(self.props_content)
+        row.pack(fill=tk.X, pady=2)
+        ttk.Label(row, text="Name:", width=10).pack(side=tk.LEFT)
+        self.props_vars['name'] = tk.StringVar()
+        name_entry = ttk.Entry(row, textvariable=self.props_vars['name'])
+        name_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        name_entry.bind('<KeyRelease>', self._on_prop_change)
+        
+        # X, Y
+        row = ttk.Frame(self.props_content)
+        row.pack(fill=tk.X, pady=2)
+        ttk.Label(row, text="X:", width=10).pack(side=tk.LEFT)
+        self.props_vars['x'] = tk.StringVar()
+        x_entry = ttk.Entry(row, textvariable=self.props_vars['x'], width=8)
+        x_entry.pack(side=tk.LEFT)
+        x_entry.bind('<KeyRelease>', self._on_prop_change)
+        
+        ttk.Label(row, text="  Y:", width=4).pack(side=tk.LEFT)
+        self.props_vars['y'] = tk.StringVar()
+        y_entry = ttk.Entry(row, textvariable=self.props_vars['y'], width=8)
+        y_entry.pack(side=tk.LEFT)
+        y_entry.bind('<KeyRelease>', self._on_prop_change)
+        
+        # Width, Height
+        row = ttk.Frame(self.props_content)
+        row.pack(fill=tk.X, pady=2)
+        ttk.Label(row, text="W:", width=10).pack(side=tk.LEFT)
+        self.props_vars['width'] = tk.StringVar()
+        w_entry = ttk.Entry(row, textvariable=self.props_vars['width'], width=8)
+        w_entry.pack(side=tk.LEFT)
+        w_entry.bind('<KeyRelease>', self._on_prop_change)
+        
+        ttk.Label(row, text="  H:", width=4).pack(side=tk.LEFT)
+        self.props_vars['height'] = tk.StringVar()
+        h_entry = ttk.Entry(row, textvariable=self.props_vars['height'], width=8)
+        h_entry.pack(side=tk.LEFT)
+        h_entry.bind('<KeyRelease>', self._on_prop_change)
+        
+        # Text/Title
+        row = ttk.Frame(self.props_content)
+        row.pack(fill=tk.X, pady=2)
+        ttk.Label(row, text="Text:", width=10).pack(side=tk.LEFT)
+        self.props_vars['text'] = tk.StringVar()
+        text_entry = ttk.Entry(row, textvariable=self.props_vars['text'])
+        text_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        text_entry.bind('<KeyRelease>', self._on_prop_change)
+        
+        # Parent
+        row = ttk.Frame(self.props_content)
+        row.pack(fill=tk.X, pady=2)
+        ttk.Label(row, text="Parent:", width=10).pack(side=tk.LEFT)
+        self.props_vars['parent'] = tk.StringVar()
+        ttk.Label(row, textvariable=self.props_vars['parent'], foreground='#4ec9b0').pack(side=tk.LEFT)
+        
+        # Delete
+        ttk.Button(self.props_content, text="🗑️ Slet Element", 
+                  command=self._delete_selected).pack(fill=tk.X, pady=(10, 0))
+    
+    def _on_prop_change(self, event=None):
+        """Håndter property ændring med realtime sync"""
+        element = self.canvas.selected_element
+        if not element or self._updating_code:
+            return
+        
+        try:
+            new_name = self.props_vars['name'].get()
+            if new_name and new_name != element.name:
+                if new_name not in self.canvas.all_elements:
+                    del self.canvas.all_elements[element.name]
+                    element.name = new_name
+                    self.canvas.all_elements[new_name] = element
+            
+            x_val = self.props_vars['x'].get()
+            y_val = self.props_vars['y'].get()
+            w_val = self.props_vars['width'].get()
+            h_val = self.props_vars['height'].get()
+            
+            if x_val.isdigit(): element.x = int(x_val)
+            if y_val.isdigit(): element.y = int(y_val)
+            if w_val.isdigit(): element.width = int(w_val)
+            if h_val.isdigit(): element.height = int(h_val)
+            
+            text = self.props_vars['text'].get()
+            if element.element_type == 'window':
+                element.set_property('title', text)
+            else:
+                element.set_property('text', text)
+            
+            self.canvas.redraw_all()
+            self._sync_to_code()
+            
+        except ValueError:
+            pass
+    
+    def _on_canvas_change(self):
+        """Callback når canvas ændres (drag etc)"""
+        self._sync_to_code()
+        # Opdater properties panel
+        if self.canvas.selected_element:
+            self._update_props_display(self.canvas.selected_element)
+    
+    def _sync_to_code(self):
+        """Synkroniser canvas til kode i realtime"""
+        if self._updating_code:
+            return
+        
+        self._updating_code = True
+        
+        try:
+            # Generer ny kode for GUI block
+            new_gui_content = self.canvas.generate_code()
+            
+            if self.gui_blocks and self.active_block_index < len(self.gui_blocks):
+                # Erstat eksisterende block
+                block = self.gui_blocks[self.active_block_index]
+                lines = self.full_code.split('\n')
+                
+                # Build new code
+                new_lines = []
+                new_lines.extend(lines[:block.start_line - 1])  # Before block
+                new_lines.append('<gui>')
+                if new_gui_content:
+                    new_lines.extend(new_gui_content.split('\n'))
+                new_lines.append('</gui>')
+                new_lines.extend(lines[block.end_line:])  # After block
+                
+                new_code = '\n'.join(new_lines)
+            else:
+                # Ingen eksisterende block - tilføj ikke noget
+                # (kun via "Ny Block" knappen)
+                new_code = self.full_code
+            
+            if self.on_code_change:
+                self.on_code_change(new_code, realtime=True)
+            
+        finally:
+            self._updating_code = False
+    
+    def _create_new_block(self):
+        """Opret en ny GUI block i koden"""
+        new_block = "\n<gui>\n</gui>\n"
+        
+        # Tilføj til slutningen af koden
+        new_code = self.full_code.rstrip() + new_block
+        
+        if self.on_code_change:
+            self.on_code_change(new_code, realtime=True)
+        
+        # Reload for at finde den nye block
+        self.load_from_code(new_code)
+        
+        # Vælg den nye block
+        if self.gui_blocks:
+            self.active_block_index = len(self.gui_blocks) - 1
+            self._update_block_combo()
+    
+    def _on_block_selected(self, event=None):
+        """Håndter valg af GUI block"""
+        selection = self.block_combo.current()
+        if selection >= 0 and selection < len(self.gui_blocks):
+            self.active_block_index = selection
+            self._load_block(self.gui_blocks[selection])
+    
+    def _update_block_combo(self):
+        """Opdater block combobox"""
+        if not self.gui_blocks:
+            self.block_combo['values'] = ['(Ingen GUI blocks)']
+            self.block_combo.current(0)
+        else:
+            values = [block.get_label() for block in self.gui_blocks]
+            self.block_combo['values'] = values
+            if self.active_block_index < len(values):
+                self.block_combo.current(self.active_block_index)
+    
+    def _load_block(self, block):
+        """Load en specifik GUI block"""
+        self.canvas.clear()
+        self._element_counter = 0
+        self._parse_gui_content(block.content)
+        self.canvas.redraw_all()
+    
+    def _delete_selected(self):
+        element = self.canvas.selected_element
+        if not element:
+            return
+        
+        if element.element_type == 'window':
+            self.canvas.windows.remove(element)
+            for child in element.children:
+                del self.canvas.all_elements[child.name]
+            del self.canvas.all_elements[element.name]
+        else:
+            if element.parent:
+                element.parent.remove_child(element)
+            del self.canvas.all_elements[element.name]
+        
+        self.canvas.selected_element = None
+        self.canvas.redraw_all()
+        self._clear_props()
+        self._sync_to_code()
+        self.info_var.set("Element slettet")
+    
+    def _clear_props(self):
+        for var in self.props_vars.values():
+            var.set('')
+    
+    def _get_next_name(self, prefix):
+        self._element_counter += 1
+        return f"{prefix}{self._element_counter}"
+    
+    def _add_container(self, gui_info):
+        category = gui_info['category']
+        name = self._get_next_name(category[:3])
+        default_size = gui_info.get('default_size', (300, 200))
+        
+        element = GUIElement(category, name, 50, 50, default_size[0], default_size[1])
+        element.set_property('title', gui_info.get('display_name', 'Window'))
+        
+        self.canvas.add_window(element)
+        self._sync_to_code()
+        self.info_var.set(f"Tilføjet vindue: {name}")
+    
+    def _add_widget(self, gui_info):
+        if not self.canvas.windows:
+            self.info_var.set("⚠️ Tilføj et vindue først!")
+            return
+        
+        parent = self.canvas.windows[-1]
+        if self.canvas.selected_element:
+            if self.canvas.selected_element.element_type == 'window':
+                parent = self.canvas.selected_element
+            elif self.canvas.selected_element.parent:
+                parent = self.canvas.selected_element.parent
+        
+        category = gui_info['category']
+        name = self._get_next_name(category[:3])
+        default_size = gui_info.get('default_size', (100, 30))
+        
+        element = GUIElement(category, name, 10, 10, default_size[0], default_size[1])
+        
+        if category in ('button', 'label'):
+            element.set_property('text', gui_info.get('display_name', category.title()))
+        elif category == 'entry':
+            element.set_property('placeholder', 'Indtast tekst...')
+        
+        self.canvas.add_widget(element, parent)
+        self._sync_to_code()
+        self.info_var.set(f"Tilføjet {category} til {parent.name}")
+    
+    def _on_element_select(self, element):
+        if element:
+            self._update_props_display(element)
+            self.info_var.set(f"Valgt: {element.element_type} '{element.name}'")
+        else:
+            self._clear_props()
+            self.info_var.set("Klik på et element for at vælge")
+    
+    def _update_props_display(self, element):
+        """Opdater properties display uden at trigger sync"""
+        self._updating_code = True
+        try:
+            self.props_vars['type'].set(f"<{element.element_type}>")
+            self.props_vars['name'].set(element.name)
+            self.props_vars['x'].set(str(element.x))
+            self.props_vars['y'].set(str(element.y))
+            self.props_vars['width'].set(str(element.width))
+            self.props_vars['height'].set(str(element.height))
+            
+            if element.element_type == 'window':
+                self.props_vars['text'].set(element.get_property('title', ''))
+                self.props_vars['parent'].set('(root)')
+            else:
+                self.props_vars['text'].set(element.get_property('text', ''))
+                self.props_vars['parent'].set(element.parent.name if element.parent else '')
+        finally:
+            self._updating_code = False
+    
+    def load_from_code(self, code):
+        """Load GUI elementer fra PyTML kode"""
+        self.full_code = code
+        self._updating_code = True
+        
+        try:
+            # Find alle GUI blocks
+            self.gui_blocks = GUIBlock.find_all_blocks(code)
+            self._update_block_combo()
+            
+            # Load første block hvis der er nogen
+            if self.gui_blocks:
+                self.active_block_index = 0
+                self._load_block(self.gui_blocks[0])
+                self.info_var.set(f"Loaded {len(self.gui_blocks)} GUI block(s)")
+            else:
+                self.canvas.clear()
+                self.info_var.set("Ingen GUI blocks fundet. Klik '➕ Ny Block' for at starte.")
+        
+        finally:
+            self._updating_code = False
+    
+    def _parse_gui_content(self, content):
+        """Parse GUI content og opret elementer"""
+        windows_by_name = {}
+        
+        # Parse windows
+        window_pattern = r'<window\s+([^>]+)>'
+        for match in re.finditer(window_pattern, content):
+            attrs = self._parse_attributes(match.group(1))
+            name = attrs.get('name', self._get_next_name('wnd'))
+            title = attrs.get('title', 'Window')
+            
+            size_match = re.search(r'size="(\d+)"(?:,"(\d+)")?', match.group(1))
+            if size_match:
+                width = int(size_match.group(1))
+                height = int(size_match.group(2)) if size_match.group(2) else width
+            else:
+                width, height = 300, 200
+            
+            element = GUIElement('window', name, 50 + len(windows_by_name) * 30, 50, width, height)
+            element.set_property('title', title)
+            self.canvas.add_window(element)
+            windows_by_name[name] = element
+        
+        # Parse widgets
+        widget_patterns = [
+            ('button', r'<button\s+([^>]+)>'),
+            ('label', r'<label\s+([^>]+)>'),
+            ('entry', r'<entry\s+([^>]+)>'),
+        ]
+        
+        for widget_type, pattern in widget_patterns:
+            for match in re.finditer(pattern, content):
+                attrs = self._parse_attributes(match.group(1))
+                name = attrs.get('name', self._get_next_name(widget_type[:3]))
+                text = attrs.get('text', widget_type.title())
+                x = int(attrs.get('x', 10))
+                y = int(attrs.get('y', 10))
+                parent_name = attrs.get('parent')
+                
+                parent = None
+                if parent_name and parent_name in windows_by_name:
+                    parent = windows_by_name[parent_name]
+                elif windows_by_name:
+                    parent = list(windows_by_name.values())[0]
+                
+                if widget_type == 'button':
+                    width, height = 100, 30
+                elif widget_type == 'label':
+                    width, height = 100, 25
+                else:
+                    width, height = 150, 25
+                
+                element = GUIElement(widget_type, name, x, y, width, height)
+                element.set_property('text', text)
+                
+                if parent:
+                    self.canvas.add_widget(element, parent)
+    
+    def _parse_attributes(self, attr_string):
+        attrs = {}
+        for match in re.finditer(r'(\w+)="([^"]*)"', attr_string):
+            attrs[match.group(1)] = match.group(2)
+        return attrs
+
+
+__all__ = ['GUINodeRegistry', 'GUIElement', 'GUICanvas', 'GUIEditPanel', 'GUIBlock']
