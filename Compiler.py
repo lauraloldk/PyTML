@@ -407,6 +407,7 @@ class PyTMLCompiler:
         from libs.label import get_line_parsers as label_parsers
         from libs.entry import get_line_parsers as entry_parsers
         from libs.input import get_line_parsers as input_parsers
+        from libs.random import get_line_parsers as random_parsers
         
         parsers.extend(var_parsers())
         parsers.extend(output_parsers())
@@ -416,6 +417,7 @@ class PyTMLCompiler:
         parsers.extend(label_parsers())
         parsers.extend(entry_parsers())
         parsers.extend(input_parsers())
+        parsers.extend(random_parsers())
         
         # Tilføj base parsere - VIGTIGT: object definitions først!
         parsers.extend(self._get_base_parsers())
