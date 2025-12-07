@@ -507,8 +507,26 @@ class LibEditor:
                                       state='readonly', width=20)
         display_combo.pack(side=tk.LEFT, padx=5)
         
+        # Quick Create section
+        quick_frame = ttk.LabelFrame(parent, text="⚡ Quick Create Lib")
+        quick_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        quick_row1 = ttk.Frame(quick_frame)
+        quick_row1.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(quick_row1, text="Tag Name:").pack(side=tk.LEFT)
+        self.quick_tag_var = tk.StringVar(value='turtlecanvas')
+        ttk.Entry(quick_row1, textvariable=self.quick_tag_var, width=20).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(quick_row1, text="🐢 Create Turtle Canvas", 
+                   command=lambda: self._quick_create_lib('turtle')).pack(side=tk.LEFT, padx=5)
+        ttk.Button(quick_row1, text="📊 Create Plot Canvas", 
+                   command=lambda: self._quick_create_lib('matplotlib')).pack(side=tk.LEFT, padx=5)
+        ttk.Button(quick_row1, text="🎮 Create Pygame Surface", 
+                   command=lambda: self._quick_create_lib('pygame')).pack(side=tk.LEFT, padx=5)
+        
         # Installed graphical packages info
-        packages_frame = ttk.LabelFrame(parent, text="📦 Installed Graphical Packages")
+        packages_frame = ttk.LabelFrame(parent, text="📦 Installed Graphical Packages (double-click to create)")
         packages_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.packages_tree = ttk.Treeview(packages_frame, 
@@ -528,12 +546,94 @@ class LibEditor:
         self.packages_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         pkg_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         
+        # Bind double-click to create lib from package
+        self.packages_tree.bind('<Double-1>', self._on_package_double_click)
+        
         # Load installed packages
         self._load_installed_packages()
         
         # Update type description
         self._on_gui_type_change()
     
+    def _on_package_double_click(self, event):
+        """Handle double-click on a package to create a lib"""
+        item = self.packages_tree.selection()
+        if not item:
+            return
+        
+        pkg_text = self.packages_tree.item(item[0], 'text')
+        # Remove icon from text
+        pkg_name = pkg_text.split(' ', 1)[-1] if ' ' in pkg_text else pkg_text
+        values = self.packages_tree.item(item[0], 'values')
+        
+        if values:
+            framework = values[0]
+            self._quick_create_lib(framework)
+    
+    def _quick_create_lib(self, framework):
+        """Quickly create a lib for a graphical framework"""
+        tag_name = self.quick_tag_var.get().strip().lower()
+        if not tag_name:
+            # Generate default name
+            tag_name = f"{framework}canvas"
+        
+        # Set the module name for code generation
+        self.current_module_name = framework
+        self.current_class_name = None
+        self.selected_members = []
+        
+        # Update GUI settings based on framework
+        if framework == 'turtle':
+            self.gui_type_var.set('graphic')
+            self.gui_framework_var.set('turtle')
+            self.gui_icon_var.set('🐢')
+            self.gui_embed_var.set('canvas')
+            self.gui_width_var.set('400')
+            self.gui_height_var.set('300')
+            self.gui_display_name.delete(0, tk.END)
+            self.gui_display_name.insert(0, 'Turtle Canvas')
+        elif framework == 'matplotlib':
+            self.gui_type_var.set('graphic')
+            self.gui_framework_var.set('matplotlib')
+            self.gui_icon_var.set('📊')
+            self.gui_embed_var.set('canvas')
+            self.gui_width_var.set('400')
+            self.gui_height_var.set('300')
+            self.gui_display_name.delete(0, tk.END)
+            self.gui_display_name.insert(0, 'Plot Canvas')
+        elif framework == 'pygame':
+            self.gui_type_var.set('surface')
+            self.gui_framework_var.set('pygame')
+            self.gui_icon_var.set('🎮')
+            self.gui_embed_var.set('embed')
+            self.gui_width_var.set('640')
+            self.gui_height_var.set('480')
+            self.gui_display_name.delete(0, tk.END)
+            self.gui_display_name.insert(0, 'Pygame Surface')
+        else:
+            messagebox.showinfo("Info", f"Framework '{framework}' - use manual creation")
+            return
+        
+        # Generate and save the code
+        libs_dir = os.path.join(os.path.dirname(__file__), 'libs')
+        filepath = os.path.join(libs_dir, f"{tag_name}.py")
+        
+        if os.path.exists(filepath):
+            if not messagebox.askyesno("Overwrite?", f"{tag_name}.py already exists. Overwrite?"):
+                return
+        
+        code = self._generate_lib_code(tag_name)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(code)
+        
+        messagebox.showinfo("Success!", 
+            f"✅ Created: libs/{tag_name}.py\n\n"
+            f"You can now use it in PyTML:\n\n"
+            f"<{tag_name} name=\"my{tag_name}\" parent=\"main\" x=\"10\" y=\"10\" />")
+        
+        self.status_var.set(f"Created libs/{tag_name}.py")
+
     def _load_installed_packages(self):
         """Load list of installed graphical packages using GUIDetector"""
         self.packages_tree.delete(*self.packages_tree.get_children())
