@@ -13,6 +13,8 @@ def resolve_value(value, context):
     
     Understøtter:
         <varname_value>  -> værdien af variablen 'varname' ELLER entry felt
+        <name_random>    -> kalder random generator (f.eks. <rnd_random>)
+        <name_float>     -> kalder random float generator
         $varname         -> værdien af variablen 'varname'  
         "literal"        -> literal string (uændret)
         123              -> tal (uændret)
@@ -37,25 +39,45 @@ def resolve_value(value, context):
     
     variables = context.get('variables')
     entries = context.get('entries')
+    randoms = context.get('randoms')
     
     result = value
     
-    # Pattern 1: <name_value> syntax - tjek først entries, så variabler
-    tag_pattern = r'<(\w+)_value>'
+    # Pattern 1: <name_suffix> syntax - handles value, random, float, etc.
+    tag_pattern = r'<(\w+)_(\w+)>'
     
     def replace_tag(match):
         name = match.group(1)
+        suffix = match.group(2)
+        full_key = f"{name}_{suffix}"
         
-        # Tjek først om det er et entry felt
-        if entries and entries.get(name):
-            entry = entries.get(name)
-            return str(entry.get_value())
+        # First check if there's a callable in context with this exact key
+        if full_key in context:
+            ctx_value = context[full_key]
+            if callable(ctx_value):
+                return str(ctx_value())
+            return str(ctx_value)
         
-        # Ellers tjek variabler
-        if variables:
-            var_value = variables.get_value(name)
-            if var_value is not None:
-                return str(var_value)
+        # Check randoms for random/float methods
+        if randoms and name in randoms:
+            rng = randoms[name]
+            if suffix == 'random' and hasattr(rng, 'random'):
+                return str(rng.random())
+            elif suffix == 'float' and hasattr(rng, 'random_float'):
+                return str(rng.random_float())
+        
+        # If suffix is 'value', check entries and variables
+        if suffix == 'value':
+            # Check entries first
+            if entries and entries.get(name):
+                entry = entries.get(name)
+                return str(entry.get_value())
+            
+            # Check variables
+            if variables:
+                var_value = variables.get_value(name)
+                if var_value is not None:
+                    return str(var_value)
         
         return match.group(0)
     
@@ -282,6 +304,9 @@ class VarNode(ActionNode):
         elif value and value.startswith('$'):
             ref_name = value[1:]
             value = context['variables'].get_value(ref_name)
+        # Resolve value med context (håndterer <name_random>, <name_value>, etc.)
+        elif value:
+            value = resolve_value(value, context)
         
         if name:
             context['variables'].set(name, value)

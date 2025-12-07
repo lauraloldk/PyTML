@@ -289,6 +289,7 @@ def resolve_value(value: Any, context: Dict) -> Any:
     
     Understøtter:
         <varname_value>  -> værdien af variablen 'varname' ELLER entry felt
+        <name_random>    -> kalder callable i context (f.eks. random generator)
         $varname         -> værdien af variablen 'varname'  
         "literal"        -> literal string (uændret)
         123              -> tal (uændret)
@@ -316,23 +317,44 @@ def resolve_value(value: Any, context: Dict) -> Any:
     
     result = value
     
-    # Pattern 1: <name_value> syntax
-    tag_pattern = r'<(\w+)_value>'
+    # Pattern 1: <name_value> or <name_something> syntax
+    tag_pattern = r'<(\w+)_(\w+)>'
     
     def replace_tag(match):
         name = match.group(1)
+        suffix = match.group(2)
+        full_key = f"{name}_{suffix}"
         
-        # Tjek først entries
-        if entries:
-            entry = entries.get(name) if hasattr(entries, 'get') else None
-            if entry:
-                return str(entry.get_value() if hasattr(entry, 'get_value') else entry)
+        # First check if there's a callable in context with this exact key
+        # This handles things like <rnd_random> -> context['rnd_random']()
+        if full_key in context:
+            ctx_value = context[full_key]
+            if callable(ctx_value):
+                return str(ctx_value())
+            return str(ctx_value)
         
-        # Tjek variabler
-        if variables:
-            var_value = variables.get_value(name) if hasattr(variables, 'get_value') else variables.get(name)
-            if var_value is not None:
-                return str(var_value)
+        # If suffix is 'value', check entries and variables
+        if suffix == 'value':
+            # Check entries first
+            if entries:
+                entry = entries.get(name) if hasattr(entries, 'get') else None
+                if entry:
+                    return str(entry.get_value() if hasattr(entry, 'get_value') else entry)
+            
+            # Check variables
+            if variables:
+                var_value = variables.get_value(name) if hasattr(variables, 'get_value') else variables.get(name)
+                if var_value is not None:
+                    return str(var_value)
+        
+        # Check randoms for specific methods
+        randoms = context.get('randoms')
+        if randoms and name in randoms:
+            rng = randoms[name]
+            if suffix == 'random' and hasattr(rng, 'random'):
+                return str(rng.random())
+            elif suffix == 'float' and hasattr(rng, 'random_float'):
+                return str(rng.random_float())
         
         return match.group(0)
     
