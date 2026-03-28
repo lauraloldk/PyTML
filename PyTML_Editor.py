@@ -1,7 +1,7 @@
 """
 PyTML Editor
 A simple editor for writing and running PyTML code
-With integrated plugins: Objects, Properties and GUIEdit
+With integrated plugins: Objects, Properties, GUIEdit and Visual Programming
 """
 
 import tkinter as tk
@@ -17,6 +17,7 @@ from plugins.Objects import ObjectsPanel
 from plugins.Properties import PropertiesPanel, parse_line_to_element
 from plugins.GUIEdit import GUIEditPanel
 from plugins.references import ReferencesPanel
+from plugins.Visual import VisualProgrammingPanel
 from EditorBlocks import EditorBlockParser, EditorState
 
 
@@ -32,6 +33,7 @@ class PyTMLEditor:
         self.parser = None
         self.editor_state = EditorState()
         self.block_parser = EditorBlockParser()
+        self._syncing = False  # Flag to prevent infinite sync loops
         
         self._setup_menu()
         self._setup_ui()
@@ -69,6 +71,7 @@ class PyTMLEditor:
         view_menu.add_command(label="Toggle Objects Panel", command=self._toggle_objects_panel)
         view_menu.add_command(label="Toggle Properties Panel", command=self._toggle_properties_panel)
         view_menu.add_command(label="Toggle GUI Editor", command=self._toggle_gui_editor)
+        view_menu.add_command(label="Toggle Visual Editor", command=self._toggle_visual_editor)
         view_menu.add_command(label="Show All References", command=self._show_references)
     
     def _setup_ui(self):
@@ -151,6 +154,13 @@ class PyTMLEditor:
         self.gui_editor = GUIEditPanel(gui_tab, on_code_change=self._on_gui_code_change)
         self.gui_editor.pack(fill=tk.BOTH, expand=True)
         
+        # --- Visual Programming Tab ---
+        visual_tab = ttk.Frame(self.mode_notebook)
+        self.mode_notebook.add(visual_tab, text="🧩 Visual")
+        
+        self.visual_editor = VisualProgrammingPanel(visual_tab, on_code_change=self._on_visual_code_change)
+        self.visual_editor.pack(fill=tk.BOTH, expand=True)
+        
         # --- References Tab ---
         refs_tab = ttk.Frame(self.mode_notebook)
         self.mode_notebook.add(refs_tab, text="📚 References")
@@ -213,9 +223,50 @@ class PyTMLEditor:
         self._update_properties_from_cursor()
     
     def _on_editor_key(self, event):
-        """Update properties on keyboard navigation"""
+        """Update properties on keyboard navigation and sync other editors"""
         if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Return'):
             self._update_properties_from_cursor()
+        
+        # Sync other editors when code changes (on any key that might change content)
+        if event.keysym not in ('Shift_L', 'Shift_R', 'Control_L', 'Control_R', 'Alt_L', 'Alt_R', 'Caps_Lock'):
+            self._schedule_sync_from_code()
+    
+    def _schedule_sync_from_code(self):
+        """Schedule a sync from code editor to other editors (debounced)"""
+        if hasattr(self, '_sync_timer'):
+            self.root.after_cancel(self._sync_timer)
+        self._sync_timer = self.root.after(300, self._sync_from_code)
+    
+    def _sync_from_code(self):
+        """Sync GUI and Visual editors from code editor"""
+        if self._syncing:
+            return
+        
+        self._syncing = True
+        try:
+            current_code = self.editor.get('1.0', tk.END)
+            current_tab = self.mode_notebook.index(self.mode_notebook.select())
+            
+            # Only sync the currently visible tab to avoid unnecessary work
+            if current_tab == 1:  # GUI Editor
+                self.gui_editor.load_from_code(current_code)
+            elif current_tab == 2:  # Visual Editor
+                self.visual_editor.load_from_code(current_code)
+        finally:
+            self._syncing = False
+    
+    def _sync_all_from_code(self):
+        """Force sync all editors from code (used on file load)"""
+        if self._syncing:
+            return
+        
+        self._syncing = True
+        try:
+            current_code = self.editor.get('1.0', tk.END)
+            self.gui_editor.load_from_code(current_code)
+            self.visual_editor.load_from_code(current_code)
+        finally:
+            self._syncing = False
     
     def _update_properties_from_cursor(self):
         """Update properties panel based on cursor position"""
@@ -261,28 +312,74 @@ class PyTMLEditor:
     
     def _on_gui_code_change(self, code, realtime=False):
         """Callback from GUI editor when code changes"""
+        if self._syncing:
+            return
+        
         if code == "__REFRESH__":
             # Refresh GUI preview from current code
             current_code = self.editor.get('1.0', tk.END)
             self.gui_editor.load_from_code(current_code)
             self.status_var.set("GUI preview updated from code")
         elif realtime:
-            # Realtime synchronization - replace all code
-            cursor_pos = self.editor.index(tk.INSERT)
-            self.editor.delete('1.0', tk.END)
-            self.editor.insert('1.0', code)
-            # Try to preserve cursor position
+            self._syncing = True
             try:
-                self.editor.mark_set(tk.INSERT, cursor_pos)
-                self.editor.see(tk.INSERT)
-            except:
-                pass
-            self.status_var.set("🔄 GUI synchronized")
+                # Realtime synchronization - replace all code
+                cursor_pos = self.editor.index(tk.INSERT)
+                self.editor.delete('1.0', tk.END)
+                self.editor.insert('1.0', code)
+                # Try to preserve cursor position
+                try:
+                    self.editor.mark_set(tk.INSERT, cursor_pos)
+                    self.editor.see(tk.INSERT)
+                except:
+                    pass
+                
+                # Also sync Visual editor
+                self.visual_editor.load_from_code(code)
+                self.status_var.set("🔄 GUI synchronized")
+            finally:
+                self._syncing = False
         else:
             # Legacy: Insert code (no longer used)
             self.editor.insert(tk.END, "\n" + code)
             self.mode_notebook.select(0)
             self.status_var.set("GUI code generated and inserted")
+    
+    def _on_visual_code_change(self, code):
+        """Callback from Visual editor when blocks change"""
+        if self._syncing:
+            return
+        
+        if code is None:
+            return
+        
+        # Handle insert mode (non-destructive)
+        if isinstance(code, tuple) and len(code) == 2 and code[0] == '__INSERT__':
+            block_code = code[1]
+            if block_code:
+                # Insert at cursor position, don't replace
+                self.mode_notebook.select(0)  # Switch to code tab
+                self.editor.insert(tk.INSERT, "\n" + block_code + "\n")
+                self.editor.see(tk.INSERT)
+                self.status_var.set("🧩 Visual blocks inserted")
+            return
+        
+        # Legacy full-replace mode (not used anymore)
+        self._syncing = True
+        try:
+            cursor_pos = self.editor.index(tk.INSERT)
+            self.editor.delete('1.0', tk.END)
+            self.editor.insert('1.0', code)
+            try:
+                self.editor.mark_set(tk.INSERT, cursor_pos)
+                self.editor.see(tk.INSERT)
+            except:
+                pass
+            
+            self.gui_editor.load_from_code(code)
+            self.status_var.set("🧩 Visual blocks synchronized")
+        finally:
+            self._syncing = False
     
     def _toggle_objects_panel(self):
         """Show/hide Objects panel"""
@@ -302,17 +399,30 @@ class PyTMLEditor:
         """Switch to GUI editor tab"""
         self.mode_notebook.select(1)
     
-    def _show_references(self):
-        """Switch to References tab"""
+    def _toggle_visual_editor(self):
+        """Switch to Visual editor tab"""
         self.mode_notebook.select(2)
     
+    def _show_references(self):
+        """Switch to References tab"""
+        self.mode_notebook.select(3)
+    
     def _on_tab_change(self, event):
-        """Handle tab switch"""
-        current_tab = self.mode_notebook.index(self.mode_notebook.select())
-        if current_tab == 1:  # GUI Editor tab
-            # Load current code into GUI preview
+        """Handle tab switch - sync the target tab from code"""
+        if self._syncing:
+            return
+        
+        self._syncing = True
+        try:
+            current_tab = self.mode_notebook.index(self.mode_notebook.select())
             current_code = self.editor.get('1.0', tk.END)
-            self.gui_editor.load_from_code(current_code)
+            
+            if current_tab == 1:  # GUI Editor tab
+                self.gui_editor.load_from_code(current_code)
+            elif current_tab == 2:  # Visual Editor tab
+                self.visual_editor.load_from_code(current_code)
+        finally:
+            self._syncing = False
     
     def new_file(self):
         """Create new file"""
@@ -340,6 +450,9 @@ class PyTMLEditor:
             self.current_file = filepath
             self.root.title(f"PyTML Editor - {os.path.basename(filepath)}")
             self.status_var.set(f"Loaded: {filepath}")
+            
+            # Sync all editors with the loaded content
+            self._sync_all_from_code()
         except Exception as e:
             messagebox.showerror("Error", f"Could not open file: {e}")
     
