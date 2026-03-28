@@ -139,35 +139,228 @@ class ReferencesRegistry:
             self._analyze_lib_file(lib_file)
     
     def _analyze_lib_file(self, filepath):
-        """Analyze a lib file for tags and methods"""
+        """Analyze a lib file for tags and methods - FULLY DYNAMIC"""
         module_name = os.path.basename(filepath)[:-3]
         
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Find syntax from docstring
-            syntax_matches = re.findall(r'Syntax:\s*\n((?:\s+<[^>]+>\s*\n?)+)', content)
+            # Extract module docstring
+            docstring = self._extract_docstring(content)
             
-            # Find get_line_parsers patterns
+            # Parse Syntax: block from docstring
+            syntax_lines = self._extract_syntax_lines(docstring)
+            
+            # Process each syntax line dynamically
+            for syntax in syntax_lines:
+                self._process_syntax_line(syntax, module_name)
+            
+            # Also look for get_line_parsers patterns
             parser_patterns = re.findall(r"\(r'(<[^']+>)'", content)
-            
-            # Find GUI info
-            if 'get_gui_info' in content:
-                self._load_gui_info(filepath, module_name)
-            
-            # Analyze based on module name
-            if module_name == 'window':
-                self._add_window_tags()
-            elif module_name == 'button':
-                self._add_button_tags()
-            elif module_name == 'label':
-                self._add_label_tags()
-            elif module_name == 'entry':
-                self._add_entry_tags()
+            for pattern in parser_patterns:
+                self._process_syntax_line(pattern, module_name)
                 
         except Exception as e:
             print(f"ReferencesRegistry: Error analyzing {filepath}: {e}")
+    
+    def _extract_docstring(self, content):
+        """Extract the module docstring"""
+        # Match triple-quoted docstring at start of file
+        match = re.match(r'^\s*"""(.*?)"""', content, re.DOTALL)
+        if match:
+            return match.group(1)
+        match = re.match(r"^\s*'''(.*?)'''", content, re.DOTALL)
+        if match:
+            return match.group(1)
+        return ""
+    
+    def _extract_syntax_lines(self, docstring):
+        """Extract all syntax examples from a docstring"""
+        lines = []
+        
+        # Find Syntax: block
+        syntax_match = re.search(r'Syntax:\s*\n((?:[ \t]+[^\n]+\n?)+)', docstring)
+        if syntax_match:
+            block = syntax_match.group(1)
+            # Extract each line that contains a tag
+            for line in block.split('\n'):
+                # Extract the tag part (before any -> comments)
+                tag_match = re.search(r'(<[^>]+>)', line)
+                if tag_match:
+                    lines.append(tag_match.group(1))
+        
+        # Also look for Usage: block
+        usage_match = re.search(r'Usage:\s*\n?((?:[ \t]+[^\n]+\n?)+)', docstring)
+        if usage_match:
+            block = usage_match.group(1)
+            for line in block.split('\n'):
+                tag_match = re.search(r'(<[^>]+>)', line)
+                if tag_match:
+                    lines.append(tag_match.group(1))
+        
+        return lines
+    
+    def _process_syntax_line(self, syntax, module_name):
+        """Process a single syntax line and create appropriate TagInfo"""
+        syntax = syntax.strip()
+        if not syntax:
+            return
+        
+        # Detect pattern type and create appropriate tag
+        
+        # Pattern 1: Element creation tag <tagname attr="value" ...>
+        # e.g., <button text="Klik" name="btn1" parent="wnd1">
+        elem_match = re.match(r'<(\w+)\s+([^>]+)>', syntax)
+        if elem_match:
+            tag_name = elem_match.group(1)
+            attrs_str = elem_match.group(2)
+            
+            # Skip if it looks like a method pattern (has underscore)
+            if '_' in tag_name:
+                return
+            
+            # Skip if already exists (don't overwrite)
+            if tag_name not in self.tags:
+                tag = TagInfo(tag_name, 'element', module_name, syntax)
+                tag.description = f"Create a {tag_name}"
+                tag.attributes = self._parse_attributes(attrs_str)
+                self.tags[tag_name] = tag
+            return
+        
+        # Pattern 2: Element method/event <name_action> or <name_action="value">
+        # e.g., <btn1_click>, <wnd1_show>, <lbl1_text="Hello">
+        # Check this BEFORE simple tag to catch name_action patterns
+        method_match = re.match(r'<(\w+)_(\w+)(?:="([^"]*)")?(?:,\s*"([^"]*)")?>', syntax)
+        if method_match:
+            prefix = method_match.group(1)  # btn1, wnd1, etc.
+            action = method_match.group(2)  # click, show, text
+            value = method_match.group(3)   # Optional value
+            
+            # Determine if this is an event, method, or property setter
+            method_key = f'_{action}'
+            
+            if method_key not in self.methods:
+                if action in ('click', 'doubleclick', 'hover', 'focus', 'blur', 'change', 'submit'):
+                    # Event pattern
+                    method = MethodInfo(action, f'<name_{action}>', f'{action} event')
+                    method.tag_type = 'event'
+                    self.methods[method_key] = method
+                    
+                    # Also add as a reference tag
+                    ref_tag = TagInfo(f'_{action}', 'event', module_name, f'<elementname_{action}>')
+                    ref_tag.description = f"Event triggered on {action}"
+                    if method_key not in self.tags:
+                        self.tags[method_key] = ref_tag
+                
+                elif action in ('show', 'hide', 'close', 'destroy', 'clear', 'focus'):
+                    # Action method (no value)
+                    method = MethodInfo(action, f'<name_{action}>', f'{action} the element')
+                    method.tag_type = 'method'
+                    self.methods[method_key] = method
+                    
+                    ref_tag = TagInfo(f'_{action}', 'method', module_name, f'<elementname_{action}>')
+                    ref_tag.description = f"Method: {action}"
+                    if method_key not in self.tags:
+                        self.tags[method_key] = ref_tag
+                
+                elif action == 'value':
+                    # Special: _value is a reference pattern
+                    ref_tag = TagInfo('_value', 'reference', module_name, '<varname_value>')
+                    ref_tag.description = "Get value of a variable or entry"
+                    if '_value' not in self.tags:
+                        self.tags['_value'] = ref_tag
+                
+                elif action in ('random', 'float'):
+                    # Random generator references
+                    ref_tag = TagInfo(f'_{action}', 'reference', module_name, f'<rndname_{action}>')
+                    ref_tag.description = f"Get {action} from random generator"
+                    if method_key not in self.tags:
+                        self.tags[method_key] = ref_tag
+                
+                else:
+                    # Property setter
+                    method = MethodInfo(action, f'<name_{action}="value">', f'Set {action} property')
+                    method.tag_type = 'property'
+                    self.methods[method_key] = method
+                    
+                    ref_tag = TagInfo(f'_{action}', 'property', module_name, f'<elementname_{action}="...">')
+                    ref_tag.description = f"Set {action} property"
+                    if method_key not in self.tags:
+                        self.tags[method_key] = ref_tag
+            return
+        
+        # Pattern 3: Simple tag <tagname>
+        # e.g., <noterminate>, <input>
+        simple_match = re.match(r'<(\w+)>$', syntax)
+        if simple_match:
+            tag_name = simple_match.group(1)
+            
+            # Skip if it looks like a method pattern (has underscore)
+            if '_' in tag_name:
+                return
+            
+            if tag_name not in self.tags:
+                tag = TagInfo(tag_name, 'action', module_name, syntax)
+                tag.description = f"{tag_name} action"
+                self.tags[tag_name] = tag
+            return
+        
+        # Pattern 4: Math operations <name_value += n>, <name_value++>
+        math_match = re.match(r'<(\w+)_value\s*(\+\+|--|(\+|-|\*|/)=\s*\d+)>', syntax)
+        if math_match:
+            op = math_match.group(2)
+            if op == '++':
+                key = '_increment'
+                syntax_example = '<varname_value++>'
+                desc = 'Increment variable by 1'
+            elif op == '--':
+                key = '_decrement'
+                syntax_example = '<varname_value-->'
+                desc = 'Decrement variable by 1'
+            elif '+=' in op:
+                key = '_add'
+                syntax_example = '<varname_value += n>'
+                desc = 'Add to variable'
+            elif '-=' in op:
+                key = '_subtract'
+                syntax_example = '<varname_value -= n>'
+                desc = 'Subtract from variable'
+            else:
+                return
+            
+            if key not in self.tags:
+                ref_tag = TagInfo(key, 'math', 'var', syntax_example)
+                ref_tag.description = desc
+                self.tags[key] = ref_tag
+            return
+    
+    def _parse_attributes(self, attrs_str):
+        """Parse attributes from a string like 'text="Klik" name="btn1"'"""
+        attrs = []
+        # Find all attr="value" or attr=<var_value> patterns
+        for match in re.finditer(r'(\w+)=(?:"([^"]*)"|(<[^>]+>))', attrs_str):
+            name = match.group(1)
+            value = match.group(2) or match.group(3) or ''
+            
+            # Determine if required based on common patterns
+            required = name in ('name', 'parent')
+            
+            # Determine type
+            if name in ('x', 'y', 'width', 'height', 'min', 'max', 'count', 'from', 'to', 'interval'):
+                attr_type = 'number'
+            elif name == 'parent':
+                attr_type = 'element_ref'
+            elif value.startswith('<') and value.endswith('>'):
+                attr_type = 'variable'
+            else:
+                attr_type = 'string'
+            
+            attr = AttributeInfo(name, attr_type, required=required, default=value if not required else None)
+            attr.description = f"{name.title()} attribute"
+            attrs.append(attr)
+        
+        return attrs
     
     def _load_gui_info(self, filepath, module_name):
         """Load GUI info from a module"""
