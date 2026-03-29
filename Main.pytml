@@ -10,7 +10,7 @@
 <label text="0" name="lbl1" parent="wnd1" x="120" y="70" backgroundcolor="<bc_value>">
 </gui>
 <forever interval="100">
-<if event="<btn_plus_click>">
+<if event="<btn_plus_click>" condition="<counter_value> <10">
 <counter_value += 1>
 <lbl1_text="<counter_value>">
 <wnd1_title="Counter: <counter_value>">
@@ -24,4 +24,3 @@
 <wnd1_exit>
 </if>
 </forever>
-

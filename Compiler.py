@@ -78,15 +78,36 @@ class IfNode(ActionNode):
     
     def _evaluate_condition(self, condition, context):
         """Evaluer en simpel condition"""
+        
+        def convert_value(value):
+            """Convert value to appropriate type for condition"""
+            if value is None:
+                return 'None'
+            # Try to convert to number if possible
+            if isinstance(value, (int, float)):
+                return str(value)
+            if isinstance(value, str):
+                # Try int first
+                try:
+                    return str(int(value))
+                except ValueError:
+                    pass
+                # Try float
+                try:
+                    return str(float(value))
+                except ValueError:
+                    pass
+                # It's a real string - quote it
+                return f'"{value}"'
+            return str(value)
+        
         # Erstat <x_value> referencer med variabel værdier
         pattern_tag = r'<(\w+)_value>'
         
         def replace_tag_var(match):
             var_name = match.group(1)
             value = context['variables'].get_value(var_name)
-            if isinstance(value, str):
-                return f'"{value}"'
-            return str(value) if value is not None else 'None'
+            return convert_value(value)
         
         condition = re.sub(pattern_tag, replace_tag_var, condition)
         
@@ -96,9 +117,7 @@ class IfNode(ActionNode):
         def replace_dollar_var(match):
             var_name = match.group(1)
             value = context['variables'].get_value(var_name)
-            if isinstance(value, str):
-                return f'"{value}"'
-            return str(value) if value is not None else 'None'
+            return convert_value(value)
         
         condition = re.sub(pattern_dollar, replace_dollar_var, condition)
         
@@ -198,10 +217,15 @@ class ForeverNode(ActionNode):
 
 class EventIfNode(ActionNode):
     """Event-based if node: <if event="<btn_click>">
-    Tjekker om et event er sket og udfører children hvis ja."""
+    Tjekker om et event er sket og udfører children hvis ja.
+    
+    Understøtter også condition: <if event="<btn_click>" condition="<x_value> < 10">
+    Hvor eventet skal ske OG condition skal være sand.
+    """
     
     def execute(self, context):
         event = self.attributes.get('event', '')
+        condition = self.attributes.get('condition', None)
         
         # Parse event: <elementname_eventtype>
         import re
@@ -212,8 +236,16 @@ class EventIfNode(ActionNode):
             
             # Tjek om eventet er trigget
             if self._check_event(element_name, event_type, context):
-                for child in self.children:
-                    child.execute(context)
+                # Hvis der er en condition, tjek den også
+                if condition is not None:
+                    if self._evaluate_condition(condition, context):
+                        for child in self.children:
+                            child.execute(context)
+                else:
+                    # Ingen condition - bare kør children
+                    for child in self.children:
+                        child.execute(context)
+                
                 # Clear eventet efter håndtering
                 self._clear_event(element_name, event_type, context)
         
@@ -231,6 +263,58 @@ class EventIfNode(ActionNode):
         if 'events' in context:
             event_key = f"{element_name}_{event_type}"
             context['events'][event_key] = False
+    
+    def _evaluate_condition(self, condition, context):
+        """Evaluer en simpel condition (samme logik som IfNode)"""
+        import re
+        
+        def convert_value(value):
+            """Convert value to appropriate type for condition"""
+            if value is None:
+                return 'None'
+            # Try to convert to number if possible
+            if isinstance(value, (int, float)):
+                return str(value)
+            if isinstance(value, str):
+                # Try int first
+                try:
+                    return str(int(value))
+                except ValueError:
+                    pass
+                # Try float
+                try:
+                    return str(float(value))
+                except ValueError:
+                    pass
+                # It's a real string - quote it
+                return f'"{value}"'
+            return str(value)
+        
+        # Erstat <x_value> referencer med variabel værdier
+        pattern_tag = r'<(\w+)_value>'
+        
+        def replace_tag_var(match):
+            var_name = match.group(1)
+            value = context['variables'].get_value(var_name)
+            return convert_value(value)
+        
+        condition = re.sub(pattern_tag, replace_tag_var, condition)
+        
+        # Erstat også $variabel referencer (for bagudkompatibilitet)
+        pattern_dollar = r'\$(\w+)'
+        
+        def replace_dollar_var(match):
+            var_name = match.group(1)
+            value = context['variables'].get_value(var_name)
+            return convert_value(value)
+        
+        condition = re.sub(pattern_dollar, replace_dollar_var, condition)
+        
+        try:
+            return eval(condition)
+        except Exception as e:
+            print(f"Condition error: {e} in '{condition}'")
+            return False
 
 
 class DynamicActionNode(ActionNode):
@@ -441,7 +525,8 @@ class PyTMLCompiler:
             (r'<forever>', self._parse_forever),
             (r'</forever>', self._parse_close_forever),
             
-            # Event-based if: <if event="<btn_click>">
+            # Event-based if: <if event="<btn_click>"> or with condition
+            (r'<if\s+event="([^"]*)"\s+condition="([^"]*)">', self._parse_if_event_condition),
             (r'<if\s+event="([^"]*)">', self._parse_if_event),
             
             # === GENERISK WIDGET ACTION PARSER ===
@@ -585,6 +670,14 @@ class PyTMLCompiler:
         """Parse <if event="<btn_click>">"""
         event = match.group(1)
         node = EventIfNode('if_event', {'event': event})
+        current.add_child(node)
+        return node
+    
+    def _parse_if_event_condition(self, match, current, context):
+        """Parse <if event="<btn_click>" condition="<x_value> < 10">"""
+        event = match.group(1)
+        condition = match.group(2)
+        node = EventIfNode('if_event', {'event': event, 'condition': condition})
         current.add_child(node)
         return node
     

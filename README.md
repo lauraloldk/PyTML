@@ -15,7 +15,7 @@
 ### Installation
 
 ```bash
-git clone https://github.com/lauraloldk/PyTML.git
+git clone https://github.com/yourusername/PyTML.git
 cd PyTML
 python Main.py
 ```

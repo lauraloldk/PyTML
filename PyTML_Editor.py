@@ -1,7 +1,7 @@
 """
 PyTML Editor
 A simple editor for writing and running PyTML code
-With integrated plugins: Objects, Properties, GUIEdit and Visual Programming
+Plugins are loaded dynamically from the plugins/ folder
 """
 
 import tkinter as tk
@@ -17,7 +17,7 @@ from plugins.Objects import ObjectsPanel
 from plugins.Properties import PropertiesPanel, parse_line_to_element
 from plugins.GUIEdit import GUIEditPanel
 from plugins.references import ReferencesPanel
-from plugins.Visual import VisualProgrammingPanel
+
 from plugins.LibEditor import open_lib_editor
 from EditorBlocks import EditorBlockParser, EditorState
 
@@ -72,7 +72,6 @@ class PyTMLEditor:
         view_menu.add_command(label="Toggle Objects Panel", command=self._toggle_objects_panel)
         view_menu.add_command(label="Toggle Properties Panel", command=self._toggle_properties_panel)
         view_menu.add_command(label="Toggle GUI Editor", command=self._toggle_gui_editor)
-        view_menu.add_command(label="Toggle Visual Editor", command=self._toggle_visual_editor)
         view_menu.add_command(label="Show All References", command=self._show_references)
         
         # Tools menu
@@ -157,15 +156,12 @@ class PyTMLEditor:
         gui_tab = ttk.Frame(self.mode_notebook)
         self.mode_notebook.add(gui_tab, text="🎨 GUI Editor")
         
-        self.gui_editor = GUIEditPanel(gui_tab, on_code_change=self._on_gui_code_change)
+        self.gui_editor = GUIEditPanel(
+            gui_tab, 
+            on_code_change=self._on_gui_code_change,
+            on_element_select=self._on_gui_element_select
+        )
         self.gui_editor.pack(fill=tk.BOTH, expand=True)
-        
-        # --- Visual Programming Tab ---
-        visual_tab = ttk.Frame(self.mode_notebook)
-        self.mode_notebook.add(visual_tab, text="🧩 Visual")
-        
-        self.visual_editor = VisualProgrammingPanel(visual_tab, on_code_change=self._on_visual_code_change)
-        self.visual_editor.pack(fill=tk.BOTH, expand=True)
         
         # --- References Tab ---
         refs_tab = ttk.Frame(self.mode_notebook)
@@ -244,7 +240,7 @@ class PyTMLEditor:
         self._sync_timer = self.root.after(300, self._sync_from_code)
     
     def _sync_from_code(self):
-        """Sync GUI and Visual editors from code editor"""
+        """Sync GUI editor from code editor"""
         if self._syncing:
             return
         
@@ -256,8 +252,6 @@ class PyTMLEditor:
             # Only sync the currently visible tab to avoid unnecessary work
             if current_tab == 1:  # GUI Editor
                 self.gui_editor.load_from_code(current_code)
-            elif current_tab == 2:  # Visual Editor
-                self.visual_editor.load_from_code(current_code)
         finally:
             self._syncing = False
     
@@ -270,7 +264,6 @@ class PyTMLEditor:
         try:
             current_code = self.editor.get('1.0', tk.END)
             self.gui_editor.load_from_code(current_code)
-            self.visual_editor.load_from_code(current_code)
         finally:
             self._syncing = False
     
@@ -304,16 +297,23 @@ class PyTMLEditor:
         self.status_var.set(f"Reference inserted: {syntax[:30]}...")
     
     def _on_property_change(self, element, prop):
-        """Callback when a property changes"""
-        if element:
-            # Generate new PyTML code
+        """Callback when a property changes in Properties panel"""
+        if not element:
+            return
+        
+        # Check if this element has a linked GUIElement
+        gui_elem = getattr(element, '_gui_element', None)
+        if gui_elem:
+            # GUIElement mode - redraw canvas and sync to code
+            self.gui_editor.canvas.redraw_all()
+            self.gui_editor._sync_to_code()
+            self.status_var.set(f"Property updated: {prop.name}")
+        else:
+            # Code editor mode - update current line
             new_code = element.to_pytml()
-            
-            # Replace current line
             line_idx = self.editor.index(tk.INSERT).split('.')[0]
             self.editor.delete(f"{line_idx}.0", f"{line_idx}.end")
             self.editor.insert(f"{line_idx}.0", new_code.strip())
-            
             self.status_var.set(f"Property updated: {prop.name}")
     
     def _on_gui_code_change(self, code, realtime=False):
@@ -340,8 +340,6 @@ class PyTMLEditor:
                 except:
                     pass
                 
-                # Also sync Visual editor
-                self.visual_editor.load_from_code(code)
                 self.status_var.set("🔄 GUI synchronized")
             finally:
                 self._syncing = False
@@ -351,41 +349,16 @@ class PyTMLEditor:
             self.mode_notebook.select(0)
             self.status_var.set("GUI code generated and inserted")
     
-    def _on_visual_code_change(self, code):
-        """Callback from Visual editor when blocks change"""
-        if self._syncing:
-            return
-        
-        if code is None:
-            return
-        
-        # Handle insert mode (non-destructive)
-        if isinstance(code, tuple) and len(code) == 2 and code[0] == '__INSERT__':
-            block_code = code[1]
-            if block_code:
-                # Insert at cursor position, don't replace
-                self.mode_notebook.select(0)  # Switch to code tab
-                self.editor.insert(tk.INSERT, "\n" + block_code + "\n")
-                self.editor.see(tk.INSERT)
-                self.status_var.set("🧩 Visual blocks inserted")
-            return
-        
-        # Legacy full-replace mode (not used anymore)
-        self._syncing = True
-        try:
-            cursor_pos = self.editor.index(tk.INSERT)
-            self.editor.delete('1.0', tk.END)
-            self.editor.insert('1.0', code)
-            try:
-                self.editor.mark_set(tk.INSERT, cursor_pos)
-                self.editor.see(tk.INSERT)
-            except:
-                pass
-            
-            self.gui_editor.load_from_code(code)
-            self.status_var.set("🧩 Visual blocks synchronized")
-        finally:
-            self._syncing = False
+    def _on_gui_element_select(self, element, registry):
+        """Callback from GUI editor when element is selected"""
+        if element:
+            # Load element into Properties panel
+            self.properties_panel.load_gui_element(element, registry)
+            self.mode_label.config(text=f"[{element.element_type}]")
+        else:
+            # Clear properties panel
+            self.properties_panel.load_gui_element(None)
+            self.mode_label.config(text="[Editor]")
     
     def _toggle_objects_panel(self):
         """Show/hide Objects panel"""
@@ -405,13 +378,9 @@ class PyTMLEditor:
         """Switch to GUI editor tab"""
         self.mode_notebook.select(1)
     
-    def _toggle_visual_editor(self):
-        """Switch to Visual editor tab"""
-        self.mode_notebook.select(2)
-    
     def _show_references(self):
         """Switch to References tab"""
-        self.mode_notebook.select(3)
+        self.mode_notebook.select(2)
     
     def _open_lib_editor(self):
         """Open the Library Editor window"""
@@ -429,8 +398,6 @@ class PyTMLEditor:
             
             if current_tab == 1:  # GUI Editor tab
                 self.gui_editor.load_from_code(current_code)
-            elif current_tab == 2:  # Visual Editor tab
-                self.visual_editor.load_from_code(current_code)
         finally:
             self._syncing = False
     
