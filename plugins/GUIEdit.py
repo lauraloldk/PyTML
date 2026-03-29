@@ -10,7 +10,7 @@ Supports multiple graphics frameworks:
 """
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, colorchooser
 import re
 import sys
 import os
@@ -710,76 +710,144 @@ class GUIEditPanel(ttk.Frame):
         self.sync_label.pack(side=tk.RIGHT, padx=5)
     
     def _setup_props_panel(self):
+        """Setup initial empty props panel - will be populated when element selected"""
         for widget in self.props_content.winfo_children():
             widget.destroy()
         
         self.props_vars = {}
+        self._current_props_element_type = None
         
-        # Type
+        # Placeholder
+        ttk.Label(self.props_content, text="Select an element to see properties",
+                 foreground='gray').pack(pady=20)
+    
+    def _build_props_for_element(self, element):
+        """Dynamically build properties panel based on element type"""
+        # Clear existing
+        for widget in self.props_content.winfo_children():
+            widget.destroy()
+        
+        self.props_vars = {}
+        self._current_props_element_type = element.element_type
+        
+        # Get properties from registry
+        gui_info = self.registry.nodes.get(element.element_type, {})
+        properties = gui_info.get('properties', [])
+        
+        # If not in registry, use default basic properties
+        if not properties:
+            properties = [
+                {'name': 'name', 'type': 'string'},
+                {'name': 'x', 'type': 'int'},
+                {'name': 'y', 'type': 'int'},
+                {'name': 'width', 'type': 'int'},
+                {'name': 'height', 'type': 'int'},
+            ]
+            if element.element_type == 'window':
+                properties.insert(1, {'name': 'title', 'type': 'string'})
+            else:
+                properties.insert(1, {'name': 'text', 'type': 'string'})
+                properties.append({'name': 'parent', 'type': 'element_ref'})
+        
+        # Type header (read-only)
         row = ttk.Frame(self.props_content)
         row.pack(fill=tk.X, pady=2)
-        ttk.Label(row, text="Type:", width=10).pack(side=tk.LEFT)
-        self.props_vars['type'] = tk.StringVar()
-        ttk.Label(row, textvariable=self.props_vars['type'], foreground='#569cd6').pack(side=tk.LEFT)
+        ttk.Label(row, text="Type:", width=12).pack(side=tk.LEFT)
+        self.props_vars['_type_'] = tk.StringVar(value=f"<{element.element_type}>")
+        ttk.Label(row, textvariable=self.props_vars['_type_'], foreground='#569cd6').pack(side=tk.LEFT)
         
-        # Name
-        row = ttk.Frame(self.props_content)
-        row.pack(fill=tk.X, pady=2)
-        ttk.Label(row, text="Name:", width=10).pack(side=tk.LEFT)
-        self.props_vars['name'] = tk.StringVar()
-        name_entry = ttk.Entry(row, textvariable=self.props_vars['name'])
-        name_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        name_entry.bind('<KeyRelease>', self._on_prop_change)
+        # Create widgets for each property
+        for prop in properties:
+            prop_name = prop['name'] if isinstance(prop, dict) else prop
+            prop_type = prop.get('type', 'string') if isinstance(prop, dict) else 'string'
+            
+            # Skip internal properties
+            if prop_name.startswith('_') or prop_name in ('click_handler',):
+                continue
+            
+            self._create_prop_widget(prop_name, prop_type)
         
-        # X, Y
-        row = ttk.Frame(self.props_content)
-        row.pack(fill=tk.X, pady=2)
-        ttk.Label(row, text="X:", width=10).pack(side=tk.LEFT)
-        self.props_vars['x'] = tk.StringVar()
-        x_entry = ttk.Entry(row, textvariable=self.props_vars['x'], width=8)
-        x_entry.pack(side=tk.LEFT)
-        x_entry.bind('<KeyRelease>', self._on_prop_change)
-        
-        ttk.Label(row, text="  Y:", width=4).pack(side=tk.LEFT)
-        self.props_vars['y'] = tk.StringVar()
-        y_entry = ttk.Entry(row, textvariable=self.props_vars['y'], width=8)
-        y_entry.pack(side=tk.LEFT)
-        y_entry.bind('<KeyRelease>', self._on_prop_change)
-        
-        # Width, Height
-        row = ttk.Frame(self.props_content)
-        row.pack(fill=tk.X, pady=2)
-        ttk.Label(row, text="W:", width=10).pack(side=tk.LEFT)
-        self.props_vars['width'] = tk.StringVar()
-        w_entry = ttk.Entry(row, textvariable=self.props_vars['width'], width=8)
-        w_entry.pack(side=tk.LEFT)
-        w_entry.bind('<KeyRelease>', self._on_prop_change)
-        
-        ttk.Label(row, text="  H:", width=4).pack(side=tk.LEFT)
-        self.props_vars['height'] = tk.StringVar()
-        h_entry = ttk.Entry(row, textvariable=self.props_vars['height'], width=8)
-        h_entry.pack(side=tk.LEFT)
-        h_entry.bind('<KeyRelease>', self._on_prop_change)
-        
-        # Text/Title
-        row = ttk.Frame(self.props_content)
-        row.pack(fill=tk.X, pady=2)
-        ttk.Label(row, text="Text:", width=10).pack(side=tk.LEFT)
-        self.props_vars['text'] = tk.StringVar()
-        text_entry = ttk.Entry(row, textvariable=self.props_vars['text'])
-        text_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        text_entry.bind('<KeyRelease>', self._on_prop_change)
-        
-        # Parent
-        row = ttk.Frame(self.props_content)
-        row.pack(fill=tk.X, pady=2)
-        ttk.Label(row, text="Parent:", width=10).pack(side=tk.LEFT)
-        self.props_vars['parent'] = tk.StringVar()
-        ttk.Label(row, textvariable=self.props_vars['parent'], foreground='#4ec9b0').pack(side=tk.LEFT)
-        
-        # Delete
+        # Delete button at bottom
+        ttk.Separator(self.props_content, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
         ttk.Button(self.props_content, text="🗑️ Delete Element", 
-                  command=self._delete_selected).pack(fill=tk.X, pady=(10, 0))
+                  command=self._delete_selected).pack(fill=tk.X, pady=(5, 0))
+    
+    def _create_prop_widget(self, prop_name, prop_type):
+        """Create a property input widget based on type"""
+        row = ttk.Frame(self.props_content)
+        row.pack(fill=tk.X, pady=2)
+        
+        # Label
+        display_name = prop_name.replace('_', ' ').title()
+        ttk.Label(row, text=f"{display_name}:", width=12).pack(side=tk.LEFT)
+        
+        self.props_vars[prop_name] = tk.StringVar()
+        
+        if prop_type == 'bool':
+            var = tk.BooleanVar()
+            self.props_vars[prop_name] = var
+            widget = ttk.Checkbutton(row, variable=var)
+            widget.pack(side=tk.LEFT)
+            var.trace('w', lambda *args: self._on_prop_change())
+            
+        elif prop_type == 'int':
+            widget = ttk.Entry(row, textvariable=self.props_vars[prop_name], width=8)
+            widget.pack(side=tk.LEFT)
+            widget.bind('<KeyRelease>', self._on_prop_change)
+            
+        elif prop_type == 'color':
+            widget = ttk.Entry(row, textvariable=self.props_vars[prop_name], width=10)
+            widget.pack(side=tk.LEFT)
+            widget.bind('<KeyRelease>', self._on_prop_change)
+            
+            # Color preview
+            color_val = self.props_vars[prop_name].get() or '#ffffff'
+            try:
+                preview = tk.Frame(row, width=20, height=20, bg=color_val, relief=tk.RAISED)
+                preview.pack(side=tk.LEFT, padx=2)
+                preview.pack_propagate(False)
+                self.props_vars[f'_{prop_name}_preview'] = preview
+            except:
+                pass
+            
+            # Color picker button
+            pick_btn = ttk.Button(row, text="...", width=3,
+                                  command=lambda n=prop_name: self._pick_color(n))
+            pick_btn.pack(side=tk.LEFT, padx=2)
+            
+        elif prop_type == 'element_ref':
+            # Read-only reference
+            ttk.Label(row, textvariable=self.props_vars[prop_name], 
+                     foreground='#4ec9b0').pack(side=tk.LEFT)
+            
+        elif prop_type == 'size':
+            # Width, Height pair
+            widget = ttk.Entry(row, textvariable=self.props_vars[prop_name], width=15)
+            widget.pack(side=tk.LEFT)
+            widget.bind('<KeyRelease>', self._on_prop_change)
+            
+        else:  # string (default)
+            widget = ttk.Entry(row, textvariable=self.props_vars[prop_name])
+            widget.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            widget.bind('<KeyRelease>', self._on_prop_change)
+    
+    def _pick_color(self, prop_name):
+        """Open color picker for a color property"""
+        current = self.props_vars[prop_name].get() or '#ffffff'
+        try:
+            color = colorchooser.askcolor(color=current, title=f"Vælg {prop_name}")
+            if color[1]:
+                self.props_vars[prop_name].set(color[1])
+                # Update preview
+                preview_key = f'_{prop_name}_preview'
+                if preview_key in self.props_vars:
+                    try:
+                        self.props_vars[preview_key].configure(bg=color[1])
+                    except:
+                        pass
+                self._on_prop_change()
+        except:
+            pass
     
     def _populate_add_menu(self):
         """Populate the Add Item dropdown menu with all available elements from libs"""
@@ -875,40 +943,82 @@ class GUIEditPanel(ttk.Frame):
             self._add_widget(gui_info)
 
     def _on_prop_change(self, event=None):
-        """Handle property change with realtime sync"""
+        """Handle property change with realtime sync - fully dynamic"""
         element = self.canvas.selected_element
         if not element or self._updating_code:
             return
         
         try:
-            new_name = self.props_vars['name'].get()
-            if new_name and new_name != element.name:
-                if new_name not in self.canvas.all_elements:
-                    del self.canvas.all_elements[element.name]
-                    element.name = new_name
-                    self.canvas.all_elements[new_name] = element
+            # Get properties from registry
+            gui_info = self.registry.nodes.get(element.element_type, {})
+            properties = gui_info.get('properties', [])
             
-            x_val = self.props_vars['x'].get()
-            y_val = self.props_vars['y'].get()
-            w_val = self.props_vars['width'].get()
-            h_val = self.props_vars['height'].get()
-            
-            if x_val.isdigit(): element.x = int(x_val)
-            if y_val.isdigit(): element.y = int(y_val)
-            if w_val.isdigit(): element.width = int(w_val)
-            if h_val.isdigit(): element.height = int(h_val)
-            
-            text = self.props_vars['text'].get()
-            if element.element_type == 'window':
-                element.set_property('title', text)
-            else:
-                element.set_property('text', text)
+            # Handle each property
+            for prop in properties:
+                prop_name = prop['name'] if isinstance(prop, dict) else prop
+                prop_type = prop.get('type', 'string') if isinstance(prop, dict) else 'string'
+                
+                if prop_name not in self.props_vars:
+                    continue
+                
+                var = self.props_vars[prop_name]
+                
+                # Get value based on type
+                if isinstance(var, tk.BooleanVar):
+                    value = var.get()
+                else:
+                    value = var.get()
+                
+                # Apply value to element
+                if prop_name == 'name':
+                    if value and value != element.name:
+                        if value not in self.canvas.all_elements:
+                            del self.canvas.all_elements[element.name]
+                            element.name = value
+                            self.canvas.all_elements[value] = element
+                elif prop_name == 'x':
+                    if value.isdigit():
+                        element.x = int(value)
+                elif prop_name == 'y':
+                    if value.isdigit():
+                        element.y = int(value)
+                elif prop_name == 'width':
+                    if value.isdigit():
+                        element.width = int(value)
+                elif prop_name == 'height':
+                    if value.isdigit():
+                        element.height = int(value)
+                elif prop_name == 'title' and element.element_type == 'window':
+                    element.set_property('title', value)
+                elif prop_name == 'text':
+                    element.set_property('text', value)
+                elif prop_name == 'size':
+                    # Parse "width, height" format
+                    parts = value.replace(',', ' ').split()
+                    if len(parts) >= 2:
+                        try:
+                            element.width = int(parts[0])
+                            element.height = int(parts[1])
+                        except:
+                            pass
+                elif prop_name not in ('parent',):  # Skip read-only
+                    # Set as custom property
+                    element.set_property(prop_name, value)
+                    
+                    # Update color preview if exists
+                    if prop_type == 'color':
+                        preview_key = f'_{prop_name}_preview'
+                        if preview_key in self.props_vars and value:
+                            try:
+                                self.props_vars[preview_key].configure(bg=value)
+                            except:
+                                pass
             
             self.canvas.redraw_all()
             self._sync_to_code()
             
-        except ValueError:
-            pass
+        except Exception as e:
+            pass  # Ignore errors during editing
     
     def _on_canvas_change(self):
         """Callback when canvas changes (drag etc)"""
@@ -1014,13 +1124,13 @@ class GUIEditPanel(ttk.Frame):
         
         self.canvas.selected_element = None
         self.canvas.redraw_all()
-        self._clear_props()
+        self._setup_props_panel()  # Reset to placeholder
         self._sync_to_code()
         self.info_var.set("Element deleted")
     
     def _clear_props(self):
-        for var in self.props_vars.values():
-            var.set('')
+        """Clear all property values - kept for compatibility"""
+        self._setup_props_panel()
     
     def _get_next_name(self, prefix):
         self._element_counter += 1
@@ -1086,29 +1196,72 @@ class GUIEditPanel(ttk.Frame):
     
     def _on_element_select(self, element):
         if element:
+            # Rebuild props panel if element type changed
+            if not hasattr(self, '_current_props_element_type') or \
+               self._current_props_element_type != element.element_type:
+                self._build_props_for_element(element)
             self._update_props_display(element)
             self.info_var.set(f"Selected: {element.element_type} '{element.name}'")
         else:
-            self._clear_props()
+            self._setup_props_panel()  # Reset to placeholder
             self.info_var.set("Click on an element to select")
     
     def _update_props_display(self, element):
         """Update properties display without triggering sync"""
         self._updating_code = True
         try:
-            self.props_vars['type'].set(f"<{element.element_type}>")
-            self.props_vars['name'].set(element.name)
-            self.props_vars['x'].set(str(element.x))
-            self.props_vars['y'].set(str(element.y))
-            self.props_vars['width'].set(str(element.width))
-            self.props_vars['height'].set(str(element.height))
+            # Update type display
+            if '_type_' in self.props_vars:
+                self.props_vars['_type_'].set(f"<{element.element_type}>")
             
-            if element.element_type == 'window':
-                self.props_vars['text'].set(element.get_property('title', ''))
-                self.props_vars['parent'].set('(root)')
-            else:
-                self.props_vars['text'].set(element.get_property('text', ''))
-                self.props_vars['parent'].set(element.parent.name if element.parent else '')
+            # Get properties from registry
+            gui_info = self.registry.nodes.get(element.element_type, {})
+            properties = gui_info.get('properties', [])
+            
+            # Update each property value
+            for prop in properties:
+                prop_name = prop['name'] if isinstance(prop, dict) else prop
+                
+                if prop_name not in self.props_vars:
+                    continue
+                
+                # Get value from element
+                if prop_name == 'name':
+                    value = element.name
+                elif prop_name == 'x':
+                    value = str(element.x)
+                elif prop_name == 'y':
+                    value = str(element.y)
+                elif prop_name == 'width':
+                    value = str(element.width)
+                elif prop_name == 'height':
+                    value = str(element.height)
+                elif prop_name == 'title' and element.element_type == 'window':
+                    value = element.get_property('title', '')
+                elif prop_name == 'text':
+                    value = element.get_property('text', '')
+                elif prop_name == 'parent':
+                    value = element.parent.name if element.parent else '(root)'
+                elif prop_name == 'size':
+                    value = f"{element.width}, {element.height}"
+                else:
+                    value = element.get_property(prop_name, '')
+                
+                # Set value in widget
+                var = self.props_vars[prop_name]
+                if isinstance(var, tk.BooleanVar):
+                    var.set(bool(value))
+                else:
+                    var.set(str(value) if value else '')
+                
+                # Update color preview if exists
+                preview_key = f'_{prop_name}_preview'
+                if preview_key in self.props_vars and value:
+                    try:
+                        self.props_vars[preview_key].configure(bg=value)
+                    except:
+                        pass
+                        
         finally:
             self._updating_code = False
     

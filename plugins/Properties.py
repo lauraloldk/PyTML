@@ -4,7 +4,7 @@ Dynamic loading of properties from lib files and nodes
 """
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, colorchooser
 import os
 import sys
 import inspect
@@ -90,11 +90,42 @@ class PropertyExtractor:
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             
-            # Extract from classes
+            # PRIORITY: Use get_gui_info() if available (dynamic properties)
+            if hasattr(module, 'get_gui_info'):
+                gui_info = module.get_gui_info()
+                category = gui_info.get('category', module_name)
+                properties = gui_info.get('properties', [])
+                
+                # Convert to our format
+                converted_props = []
+                for prop in properties:
+                    if isinstance(prop, dict):
+                        converted_props.append({
+                            'name': prop['name'],
+                            'type': prop.get('type', 'string'),
+                            'default': prop.get('default', ''),
+                            'editable': True
+                        })
+                    else:
+                        converted_props.append({
+                            'name': prop,
+                            'type': 'string',
+                            'default': '',
+                            'editable': True
+                        })
+                
+                # Store under category name (button, window, etc.)
+                self.class_properties[category] = converted_props
+                # Also store under class name
+                class_name = category.title()
+                self.class_properties[class_name] = converted_props
+            
+            # Also extract from classes as fallback
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if name.startswith('_') or name == 'ActionNode':
                     continue
-                self.class_properties[name] = self._extract_class_properties(cls)
+                if name not in self.class_properties:
+                    self.class_properties[name] = self._extract_class_properties(cls)
             
             # Extract from parsers
             if hasattr(module, 'get_line_parsers'):
@@ -120,8 +151,12 @@ class PropertyExtractor:
                 prop_type = 'string'
                 default = None
                 
+                # Check if it's a color property by name
+                if 'color' in param_name.lower() or param_name in ('foreground', 'background', 'bg', 'fg'):
+                    prop_type = 'color'
+                
                 # Check annotation
-                if param.annotation != inspect.Parameter.empty:
+                elif param.annotation != inspect.Parameter.empty:
                     ann = str(param.annotation)
                     if 'int' in ann:
                         prop_type = 'int'
@@ -135,7 +170,7 @@ class PropertyExtractor:
                     default = param.default
                     if isinstance(default, bool):
                         prop_type = 'bool'
-                    elif isinstance(default, int):
+                    elif isinstance(default, int) and prop_type == 'string':
                         prop_type = 'int'
                     elif isinstance(default, list):
                         prop_type = 'list'
@@ -159,7 +194,11 @@ class PropertyExtractor:
             attr = getattr(cls, attr_name, None)
             if not callable(attr) and not inspect.ismethod(attr):
                 prop_type = 'string'
-                if isinstance(attr, bool):
+                
+                # Check if it's a color by name
+                if 'color' in attr_name.lower() or attr_name in ('foreground', 'background', 'bg', 'fg'):
+                    prop_type = 'color'
+                elif isinstance(attr, bool):
                     prop_type = 'bool'
                 elif isinstance(attr, int):
                     prop_type = 'int'
@@ -222,7 +261,21 @@ class PropertyExtractor:
     
     def get_properties_for_tag(self, tag_name):
         """Get properties based on tag name"""
-        # Try to match against known classes
+        # First try exact match (e.g., 'button', 'window')
+        if tag_name in self.class_properties:
+            return self.class_properties[tag_name]
+        
+        # Try lowercase (e.g., 'Button' -> 'button')
+        tag_lower = tag_name.lower()
+        if tag_lower in self.class_properties:
+            return self.class_properties[tag_lower]
+        
+        # Try title case (e.g., 'button' -> 'Button')
+        tag_title = tag_name.title()
+        if tag_title in self.class_properties:
+            return self.class_properties[tag_title]
+        
+        # Try with Node suffix
         class_name = tag_name.title().replace('_', '') + 'Node'
         if class_name in self.class_properties:
             return self.class_properties[class_name]
@@ -442,15 +495,23 @@ class PropertiesPanel(ttk.Frame):
         
         elif prop.prop_type == 'color':
             var = tk.StringVar(value=prop.value if prop.value else "#ffffff")
-            widget = ttk.Entry(frame, textvariable=var, width=15)
+            widget = ttk.Entry(frame, textvariable=var, width=12)
             widget.var = var
             var.trace('w', lambda *args, p=prop, v=var: self._on_string_change(p, v))
-            # Color preview
+            
+            # Color preview that acts as picker button
             try:
-                preview = tk.Frame(frame, width=20, height=20, bg=prop.value if prop.value else '#ffffff')
+                preview = tk.Frame(frame, width=20, height=20, bg=prop.value if prop.value else '#ffffff', 
+                                   relief=tk.RAISED, cursor='hand2')
                 preview.pack(side=tk.RIGHT, padx=2)
+                preview.bind('<Button-1>', lambda e, v=var, p=preview: self._pick_color(v, p))
             except:
                 pass
+            
+            # Color picker button
+            pick_btn = ttk.Button(frame, text="...", width=3,
+                                  command=lambda v=var, p=preview: self._pick_color(v, p))
+            pick_btn.pack(side=tk.RIGHT, padx=2)
         
         else:  # string (default)
             var = tk.StringVar(value=str(prop.value) if prop.value is not None else "")
@@ -503,6 +564,21 @@ class PropertiesPanel(ttk.Frame):
         
         if self.on_property_change:
             self.on_property_change(self.current_element, prop)
+    
+    def _pick_color(self, var, preview_frame=None):
+        """Open color picker dialog"""
+        current_color = var.get() if var.get() else "#ffffff"
+        try:
+            color = colorchooser.askcolor(color=current_color, title="Vælg farve")
+            if color[1]:  # color is ((r,g,b), "#hexcolor")
+                var.set(color[1])
+                if preview_frame:
+                    try:
+                        preview_frame.configure(bg=color[1])
+                    except:
+                        pass
+        except:
+            pass
 
 
 def parse_line_to_element(line):
