@@ -675,6 +675,24 @@ def open_lib_editor(parent=None):
     return editor
 
 
+def get_plugin_info():
+    """Plugin registration for auto-discovery"""
+    return {
+        'name': 'LibEditor',
+        'panel_type': 'tool_window',  # Not a panel, but a tool window
+        'panel_class': None,
+        'panel_icon': '🔧',
+        'panel_name': 'Library Editor',
+        'priority': 100,
+        'callbacks': {
+            'open': open_lib_editor
+        },
+        'menu_items': [
+            {'menu': 'Tools', 'label': 'Library Editor...', 'command': 'open'}
+        ]
+    }
+
+
 if __name__ == '__main__':
     editor = LibEditorWindow()
     editor.run()

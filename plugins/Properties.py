@@ -1,6 +1,12 @@
 """
 PyTML Editor Plugin: Properties Panel
 Dynamic loading of properties from lib files and nodes
+
+Supports:
+- Dynamic property loading from libs
+- Variable references (<varname_value>) detection and display
+- Automatic property type inference from names
+- Preservation of ALL properties (known + unknown)
 """
 
 import tkinter as tk
@@ -14,6 +20,82 @@ import glob
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+# ============================================================================
+# Variable Reference Detection
+# ============================================================================
+
+def is_variable_reference(value):
+    """Check if a value is a variable reference like <varname_value> or <name_random>"""
+    if not isinstance(value, str):
+        return False
+    # Match patterns like <name_value>, <name_random>, <name_float>
+    return bool(re.match(r'^<\w+_\w+>$', value.strip()))
+
+
+def get_variable_name(value):
+    """Extract variable name from a reference like <varname_value>"""
+    if not is_variable_reference(value):
+        return None
+    match = re.match(r'^<(\w+)_(\w+)>$', value.strip())
+    if match:
+        return match.group(1)
+    return None
+
+
+def get_variable_suffix(value):
+    """Extract suffix from a reference like <varname_value> -> 'value'"""
+    if not is_variable_reference(value):
+        return None
+    match = re.match(r'^<(\w+)_(\w+)>$', value.strip())
+    if match:
+        return match.group(2)
+    return None
+
+
+def infer_property_type(name, value=None):
+    """
+    Infer property type from name and optionally value.
+    
+    Patterns:
+    - *color* -> 'color'
+    - x, y, width, height -> 'int'
+    - enabled, visible, readonly -> 'bool'
+    - size -> 'size'
+    - Variable reference -> keeps underlying type but marks as 'var_*'
+    """
+    name_lower = name.lower()
+    
+    # Check value first for variable references
+    if value is not None and is_variable_reference(value):
+        # Infer base type from name, mark as variable
+        base_type = _infer_type_from_name(name_lower)
+        return f'var_{base_type}'
+    
+    return _infer_type_from_name(name_lower)
+
+
+def _infer_type_from_name(name_lower):
+    """Infer property type from name pattern"""
+    # Color properties
+    if 'color' in name_lower or name_lower in ('bg', 'fg', 'background', 'foreground'):
+        return 'color'
+    
+    # Integer properties
+    if name_lower in ('x', 'y', 'width', 'height', 'padx', 'pady', 'padding', 'margin'):
+        return 'int'
+    
+    # Boolean properties  
+    if name_lower in ('enabled', 'visible', 'readonly', 'disabled', 'checked', 'selected'):
+        return 'bool'
+    
+    # Size (tuple/list)
+    if name_lower == 'size':
+        return 'size'
+    
+    # Default to string
+    return 'string'
 
 
 class PropertyValue:
@@ -303,38 +385,64 @@ class ElementProperties:
         self._load_properties()
     
     def _load_properties(self):
-        """Load properties based on element type"""
+        """Load properties based on element type - preserves ALL attributes"""
         props = self._extractor.get_properties_for_tag(self.element_type)
         
+        # Track which attributes we've processed
+        processed_attrs = set()
+        
+        # First: Load known properties from registry
         if props:
             group = PropertyGroup(self.element_type.title())
             for prop_def in props:
+                prop_name = prop_def['name']
+                processed_attrs.add(prop_name)
+                
                 # Use existing value from attributes if available
-                value = self.attributes.get(prop_def['name'], prop_def.get('default', ''))
+                value = self.attributes.get(prop_name, prop_def.get('default', ''))
+                
+                # Determine type - check for variable reference first
+                if is_variable_reference(value):
+                    prop_type = infer_property_type(prop_name, value)
+                else:
+                    prop_type = prop_def.get('type', 'string')
+                
                 prop = PropertyValue(
-                    name=prop_def['name'],
+                    name=prop_name,
                     value=value,
-                    prop_type=prop_def['type'],
+                    prop_type=prop_type,
                     editable=prop_def.get('editable', True)
                 )
                 group.add_property(prop)
             self.groups.append(group)
-        else:
-            # Fallback: Create properties from attributes
-            if self.attributes:
-                group = PropertyGroup("Attributes")
-                for name, value in self.attributes.items():
-                    prop_type = 'string'
-                    if isinstance(value, bool):
-                        prop_type = 'bool'
-                    elif isinstance(value, int):
-                        prop_type = 'int'
-                    elif isinstance(value, list):
-                        prop_type = 'list'
-                    
-                    prop = PropertyValue(name=name, value=value, prop_type=prop_type)
-                    group.add_property(prop)
-                self.groups.append(group)
+        
+        # Second: Add any EXTRA attributes not in registry (preserve unknown properties)
+        extra_attrs = {k: v for k, v in self.attributes.items() if k not in processed_attrs}
+        if extra_attrs:
+            group_name = "Custom Properties" if props else "Attributes"
+            
+            # Check if we need a new group or can use existing
+            if props:
+                extra_group = PropertyGroup(group_name)
+            else:
+                extra_group = PropertyGroup(self.element_type.title())
+            
+            for name, value in extra_attrs.items():
+                # Use smart type inference
+                prop_type = infer_property_type(name, value)
+                
+                # Handle list/stack values
+                if isinstance(value, list):
+                    prop_type = 'list'
+                elif isinstance(value, bool):
+                    prop_type = 'bool'
+                elif isinstance(value, int) and prop_type == 'string':
+                    prop_type = 'int'
+                
+                prop = PropertyValue(name=name, value=value, prop_type=prop_type)
+                extra_group.add_property(prop)
+            
+            self.groups.append(extra_group)
     
     def add_group(self, group):
         """Add a property group"""
@@ -425,6 +533,38 @@ class PropertiesPanel(ttk.Frame):
         self.placeholder = ttk.Label(self.scrollable_frame, text="Select an element to see properties")
         self.placeholder.pack(pady=20)
     
+    def load_gui_element(self, gui_element, registry=None):
+        """Load properties from a GUIElement (from GUIEdit plugin)
+        
+        Args:
+            gui_element: GUIElement instance with element_type, name, properties dict
+            registry: Optional GUINodeRegistry for getting property definitions
+        """
+        if gui_element is None:
+            self.load_element(None)
+            return
+        
+        # Build attributes dict from GUIElement
+        attrs = dict(gui_element.properties)
+        attrs['name'] = gui_element.name
+        attrs['x'] = gui_element.x
+        attrs['y'] = gui_element.y
+        if gui_element.element_type != 'window':
+            attrs['width'] = gui_element.width
+            attrs['height'] = gui_element.height
+        
+        # Create ElementProperties
+        element = ElementProperties(
+            element_type=gui_element.element_type,
+            element_name=gui_element.name,
+            attributes=attrs
+        )
+        
+        # Store reference to original GUIElement for updates
+        element._gui_element = gui_element
+        
+        self.load_element(element)
+    
     def load_element(self, element):
         """Load properties for an element"""
         self.current_element = element
@@ -445,6 +585,29 @@ class PropertiesPanel(ttk.Frame):
         # Create widgets for each group
         for group in element.groups:
             self._create_group(group)
+    
+    def _sync_to_gui_element(self, prop):
+        """Sync a property change back to the GUIElement (if present)"""
+        if not self.current_element:
+            return
+        gui_elem = getattr(self.current_element, '_gui_element', None)
+        if not gui_elem:
+            return
+        
+        # Handle special position/size properties
+        if prop.name == 'x':
+            gui_elem.x = int(prop.value) if prop.value else 0
+        elif prop.name == 'y':
+            gui_elem.y = int(prop.value) if prop.value else 0
+        elif prop.name == 'width':
+            gui_elem.width = int(prop.value) if prop.value else 100
+        elif prop.name == 'height':
+            gui_elem.height = int(prop.value) if prop.value else 30
+        elif prop.name == 'name':
+            gui_elem.name = str(prop.value) if prop.value else ''
+        else:
+            # Store in properties dict
+            gui_elem.set_property(prop.name, prop.value)
     
     def load_from_line(self, line):
         """Parse a line and show properties"""
@@ -471,7 +634,31 @@ class PropertiesPanel(ttk.Frame):
         ttk.Label(frame, text=prop.name, width=12).pack(side=tk.LEFT)
         
         # Input widget based on type
-        if prop.prop_type == 'bool':
+        # Handle variable reference types (var_color, var_string, etc.)
+        if prop.prop_type.startswith('var_'):
+            # Variable reference - show with indicator
+            var = tk.StringVar(value=str(prop.value) if prop.value is not None else "")
+            
+            # Variable indicator label
+            var_indicator = ttk.Label(frame, text="📌", width=2)
+            var_indicator.pack(side=tk.LEFT)
+            
+            widget = ttk.Entry(frame, textvariable=var)
+            widget.var = var
+            var.trace('w', lambda *args, p=prop, v=var: self._on_var_ref_change(p, v))
+            
+            # For var_color, try to show a preview with resolved value
+            if prop.prop_type == 'var_color':
+                resolved_color = self._resolve_variable_color(prop.value)
+                if resolved_color:
+                    try:
+                        preview = tk.Frame(frame, width=20, height=20, bg=resolved_color, 
+                                           relief=tk.RAISED)
+                        preview.pack(side=tk.RIGHT, padx=2)
+                    except:
+                        pass
+        
+        elif prop.prop_type == 'bool':
             var = tk.BooleanVar(value=bool(prop.value))
             widget = ttk.Checkbutton(frame, variable=var)
             widget.var = var
@@ -526,9 +713,46 @@ class PropertiesPanel(ttk.Frame):
         
         self.property_widgets[prop.name] = widget
     
+    def _on_var_ref_change(self, prop, var):
+        """Handle variable reference change - preserve as-is"""
+        prop.set_value(var.get())
+        self._sync_to_gui_element(prop)
+        if self.on_property_change:
+            self.on_property_change(self.current_element, prop)
+    
+    def _resolve_variable_color(self, value):
+        """Try to resolve a variable reference to a color value"""
+        if not value or not is_variable_reference(value):
+            return None
+        
+        var_name = get_variable_name(value)
+        if not var_name:
+            return None
+        
+        # Try to find the variable in the current file context
+        # Look for var definitions like: var name = #color
+        # This is a best-effort preview - may not always work
+        try:
+            if hasattr(self, 'editor') and hasattr(self.editor, 'code_area'):
+                code = self.editor.code_area.get("1.0", "end-1c")
+                # Look for: var <varname> = <value>
+                import re
+                pattern = rf'var\s+{re.escape(var_name)}\s*=\s*([^\n]+)'
+                match = re.search(pattern, code)
+                if match:
+                    val = match.group(1).strip()
+                    # Check if it's a color
+                    if val.startswith('#') or val.startswith('rgb'):
+                        return val
+        except:
+            pass
+        
+        return None
+    
     def _on_string_change(self, prop, var):
         """Handle string change"""
         prop.set_value(var.get())
+        self._sync_to_gui_element(prop)
         if self.on_property_change:
             self.on_property_change(self.current_element, prop)
     
@@ -538,12 +762,14 @@ class PropertiesPanel(ttk.Frame):
             prop.set_value(int(var.get()))
         except ValueError:
             pass
+        self._sync_to_gui_element(prop)
         if self.on_property_change:
             self.on_property_change(self.current_element, prop)
     
     def _on_bool_change(self, prop, var):
         """Handle bool change"""
         prop.set_value(var.get())
+        self._sync_to_gui_element(prop)
         if self.on_property_change:
             self.on_property_change(self.current_element, prop)
     
@@ -562,6 +788,7 @@ class PropertiesPanel(ttk.Frame):
         else:
             prop.set_value([])
         
+        self._sync_to_gui_element(prop)
         if self.on_property_change:
             self.on_property_change(self.current_element, prop)
     
@@ -613,12 +840,29 @@ def parse_line_to_element(line):
     return ElementProperties(tag_type, attributes=attributes)
 
 
+def get_plugin_info():
+    """Plugin registration for auto-discovery"""
+    return {
+        'name': 'Properties',
+        'panel_type': 'right',
+        'panel_class': PropertiesPanel,
+        'panel_icon': '⚙️',
+        'panel_name': 'Properties',
+        'priority': 10,  # Show first in right panel
+        'callbacks': {},
+        'menu_items': [
+            {'menu': 'View', 'label': 'Toggle Properties Panel', 'command': 'toggle'}
+        ]
+    }
+
+
 # Export
 __all__ = [
     'PropertyValue',
     'PropertyGroup',
     'PropertyExtractor',
-    'ElementProperties', 
+    'ElementProperties',
     'PropertiesPanel',
-    'parse_line_to_element'
+    'parse_line_to_element',
+    'get_plugin_info'
 ]

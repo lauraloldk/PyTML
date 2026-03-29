@@ -402,5 +402,21 @@ class ObjectsPanel(ttk.Frame):
                 break
 
 
+def get_plugin_info():
+    """Plugin registration for auto-discovery"""
+    return {
+        'name': 'Objects',
+        'panel_type': 'left',
+        'panel_class': ObjectsPanel,
+        'panel_icon': '📦',
+        'panel_name': 'Objects',
+        'priority': 10,  # Show first in left panel
+        'callbacks': {},
+        'menu_items': [
+            {'menu': 'View', 'label': 'Toggle Objects Panel', 'command': 'toggle'}
+        ]
+    }
+
+
 # Export
-__all__ = ['ObjectInfo', 'ObjectLibrary', 'ObjectsPanel']
+__all__ = ['ObjectInfo', 'ObjectLibrary', 'ObjectsPanel', 'get_plugin_info']

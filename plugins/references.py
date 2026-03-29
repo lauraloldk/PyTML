@@ -831,5 +831,21 @@ class ReferencesPanel(ttk.Frame):
         self.details_text.config(state='disabled')
 
 
+def get_plugin_info():
+    """Plugin registration for auto-discovery"""
+    return {
+        'name': 'References',
+        'panel_type': 'center_tab',
+        'panel_class': ReferencesPanel,
+        'panel_icon': '📚',
+        'panel_name': 'References',
+        'priority': 50,  # Show after GUI Editor
+        'callbacks': {},
+        'menu_items': [
+            {'menu': 'View', 'label': 'Show All References', 'command': 'select_tab'}
+        ]
+    }
+
+
 # Export
-__all__ = ['ReferencesPanel', 'ReferencesRegistry', 'TagInfo', 'AttributeInfo', 'MethodInfo']
+__all__ = ['ReferencesPanel', 'ReferencesRegistry', 'TagInfo', 'AttributeInfo', 'MethodInfo', 'get_plugin_info']

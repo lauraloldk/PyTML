@@ -39,6 +39,15 @@ FRAMEWORK_TYPES = {
     }
 }
 
+# Default editor colors - libs can override via get_gui_info()['editor_colors']
+DEFAULT_EDITOR_COLORS = {
+    'window': {'bg': '#3c3c3c', 'border': '#569cd6', 'titlebar': '#252526', 'text': '#cccccc'},
+    'container': {'bg': '#2d3436', 'border': '#74b9ff', 'text': '#dfe6e9'},
+    'widget': {'bg': '#2d3436', 'border': '#a29bfe', 'text': '#dfe6e9'},
+    'graphic': {'bg': '#1a1a2e', 'border': '#16c79a', 'text': '#16c79a'},
+    'surface': {'bg': '#0d0d0d', 'border': '#e94560', 'text': '#e94560'},
+}
+
 
 class GUINodeRegistry:
     """Registry of all GUI node types from libs - dynamically discovers all available elements"""
@@ -257,7 +266,7 @@ class GUIElement:
                 abs_y <= canvas_y <= abs_y + self.height)
     
     def to_pytml(self):
-        """Generate PyTML code"""
+        """Generate PyTML code - includes ALL properties"""
         attrs = [f'name="{self.name}"']
         
         if self.element_type == 'window':
@@ -271,6 +280,12 @@ class GUIElement:
                 attrs.append(f'parent="{self.parent.name}"')
             attrs.append(f'x="{self.x}"')
             attrs.append(f'y="{self.y}"')
+        
+        # Add ALL other properties (colors, etc.) - preserves user's code
+        skip_props = {'title', 'text', 'parent', 'x', 'y', 'name', 'size', 'width', 'height'}
+        for prop_name, prop_value in self.properties.items():
+            if prop_name not in skip_props and prop_value is not None:
+                attrs.append(f'{prop_name}="{prop_value}"')
         
         return f'<{self.element_type} {" ".join(attrs)}>'
 
@@ -292,12 +307,9 @@ class GUICanvas(tk.Canvas):
         
         self.grid_size = 10
         
-        self.colors = {
-            'window': {'bg': '#3c3c3c', 'border': '#569cd6', 'titlebar': '#252526'},
-            'button': {'bg': '#0e639c', 'border': '#0e639c', 'text': '#ffffff'},
-            'label': {'bg': 'transparent', 'border': '#dcdcaa', 'text': '#dcdcaa'},
-            'entry': {'bg': '#3c3c3c', 'border': '#858585', 'text': '#d4d4d4'},
-        }
+        # Build colors dynamically from registry
+        self.colors = dict(DEFAULT_EDITOR_COLORS)  # Start with defaults
+        self._load_colors_from_registry()
         
         self.bind('<Button-1>', self._on_click)
         self.bind('<B1-Motion>', self._on_drag)
@@ -317,6 +329,30 @@ class GUICanvas(tk.Canvas):
             self.create_line(0, y, width, y, fill='#383838', tags='grid')
         
         self.tag_lower('grid')
+    
+    def _load_colors_from_registry(self):
+        """Load editor colors from libs - allows libs to define their own colors"""
+        for category, gui_info in self.registry.nodes.items():
+            if 'editor_colors' in gui_info:
+                # Lib defines custom colors
+                self.colors[category] = gui_info['editor_colors']
+            elif category not in self.colors:
+                # Use type-based fallback
+                element_type = gui_info.get('type', 'widget')
+                framework = gui_info.get('framework', 'tkinter')
+                
+                if element_type == 'graphic' or framework == 'canvas':
+                    self.colors[category] = dict(DEFAULT_EDITOR_COLORS['graphic'])
+                elif element_type == 'surface' or framework in ('pygame', 'sdl', 'opengl'):
+                    self.colors[category] = dict(DEFAULT_EDITOR_COLORS['surface'])
+                elif element_type == 'container':
+                    self.colors[category] = dict(DEFAULT_EDITOR_COLORS['container'])
+                else:
+                    self.colors[category] = dict(DEFAULT_EDITOR_COLORS['widget'])
+    
+    def get_element_info(self, element_type):
+        """Get gui_info for an element type from registry"""
+        return self.registry.get_by_category(element_type)
     
     def _on_resize(self, event):
         self._draw_grid()
@@ -387,106 +423,72 @@ class GUICanvas(tk.Canvas):
         self._raise_window_children(window)
     
     def _draw_widget(self, widget):
+        """Draw any widget type - fully dynamic based on registry"""
         tag = f"widget_{widget.name}"
         self.delete(tag)
         
         abs_x, abs_y = widget.get_absolute_position()
-        colors = self.colors.get(widget.element_type, self.colors['button'])
         
-        border_color = '#ff6b6b' if widget.selected else colors['border']
+        # Get gui_info from registry if available
+        gui_info = self.get_element_info(widget.element_type) or {}
+        element_type = gui_info.get('type', 'widget')
+        framework = gui_info.get('framework', 'tkinter')
+        icon = gui_info.get('icon', '📦')
+        
+        # Get colors - check registry, then widget type, then fallback
+        colors = self.colors.get(widget.element_type, 
+                                 self.colors.get(element_type, 
+                                                 DEFAULT_EDITOR_COLORS['widget']))
+        
+        border_color = '#ff6b6b' if widget.selected else colors.get('border', '#a29bfe')
         border_width = 2 if widget.selected else 1
+        bg_color = colors.get('bg', '#2d3436')
+        text_color = colors.get('text', '#dfe6e9')
         
-        element_type = widget.get_property('element_type', 'widget')
-        framework = widget.get_property('framework', 'tkinter')
-        
-        if widget.element_type == 'button':
+        # Draw based on category type
+        if element_type == 'graphic' or framework == 'canvas':
+            # Canvas/graphic elements - grid pattern
             self.create_rectangle(
                 abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
-                fill=colors['bg'], outline=border_color, width=border_width,
+                fill=bg_color, outline=border_color, width=border_width,
                 tags=(tag, 'widget', 'element')
             )
-            text = widget.get_property('text', widget.name)
-            self.create_text(
-                abs_x + widget.width // 2, abs_y + widget.height // 2,
-                text=text, fill=colors['text'], font=('Segoe UI', 9),
-                tags=(tag, 'widget', 'element')
-            )
-            
-        elif widget.element_type == 'label':
-            text = widget.get_property('text', widget.name)
-            self.create_text(
-                abs_x, abs_y + widget.height // 2,
-                text=text, fill=colors['text'], font=('Segoe UI', 9),
-                anchor='w', tags=(tag, 'widget', 'element')
-            )
-            if widget.selected:
-                self.create_rectangle(
-                    abs_x - 2, abs_y, abs_x + widget.width + 2, abs_y + widget.height,
-                    fill='', outline=border_color, width=border_width, dash=(2, 2),
-                    tags=(tag, 'widget', 'element')
-                )
-                
-        elif widget.element_type == 'entry':
-            self.create_rectangle(
-                abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
-                fill=colors['bg'], outline=border_color, width=border_width,
-                tags=(tag, 'widget', 'element')
-            )
-            placeholder = widget.get_property('placeholder', 'Input...')
-            self.create_text(
-                abs_x + 5, abs_y + widget.height // 2,
-                text=placeholder, fill='#808080', font=('Segoe UI', 9),
-                anchor='w', tags=(tag, 'widget', 'element')
-            )
-        
-        elif element_type == 'graphic' or framework == 'canvas':
-            # Canvas/Plot/Turtle graphics - draw as a canvas placeholder
-            self.create_rectangle(
-                abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
-                fill='#1a1a2e', outline='#16c79a' if not widget.selected else border_color,
-                width=border_width, tags=(tag, 'widget', 'element')
-            )
-            # Draw grid pattern to indicate canvas
+            # Grid pattern
             for i in range(0, widget.width, 20):
                 self.create_line(abs_x + i, abs_y, abs_x + i, abs_y + widget.height,
                                fill='#2a2a4e', tags=(tag, 'widget', 'element'))
             for i in range(0, widget.height, 20):
                 self.create_line(abs_x, abs_y + i, abs_x + widget.width, abs_y + i,
                                fill='#2a2a4e', tags=(tag, 'widget', 'element'))
-            # Label
-            text = widget.get_property('text', f'[{widget.element_type}]')
+            text = widget.get_property('text', f'{icon} {widget.element_type}')
             self.create_text(
                 abs_x + widget.width // 2, abs_y + widget.height // 2,
-                text=text, fill='#16c79a', font=('Consolas', 10, 'bold'),
+                text=text, fill=text_color, font=('Consolas', 10, 'bold'),
                 tags=(tag, 'widget', 'element')
             )
-            # Framework indicator
             self.create_text(
                 abs_x + widget.width - 5, abs_y + 12,
                 text=f"🎨 {framework}", fill='#808080', font=('Consolas', 8),
                 anchor='e', tags=(tag, 'widget', 'element')
             )
-        
+            
         elif element_type == 'surface' or framework in ('pygame', 'sdl', 'opengl'):
-            # Embedded surface (pygame, etc.) - draw as embedded frame placeholder
+            # Embedded surface - X pattern
             self.create_rectangle(
                 abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
-                fill='#0d0d0d', outline='#e94560' if not widget.selected else border_color,
-                width=border_width, tags=(tag, 'widget', 'element')
+                fill=bg_color, outline=border_color, width=border_width,
+                tags=(tag, 'widget', 'element')
             )
-            # Draw pattern to indicate embedded surface
             self.create_line(abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
                            fill='#2a2a2a', tags=(tag, 'widget', 'element'))
             self.create_line(abs_x + widget.width, abs_y, abs_x, abs_y + widget.height,
                            fill='#2a2a2a', tags=(tag, 'widget', 'element'))
-            # Label
-            text = widget.get_property('text', f'[{widget.element_type}]')
+            text = widget.get_property('text', f'{icon} {widget.element_type}')
             self.create_text(
                 abs_x + widget.width // 2, abs_y + widget.height // 2,
-                text=text, fill='#e94560', font=('Consolas', 10, 'bold'),
+                text=text, fill=text_color, font=('Consolas', 10, 'bold'),
                 tags=(tag, 'widget', 'element')
             )
-            # Framework indicator
             self.create_text(
                 abs_x + widget.width - 5, abs_y + 12,
                 text=f"🎮 {framework}", fill='#808080', font=('Consolas', 8),
@@ -494,18 +496,35 @@ class GUICanvas(tk.Canvas):
             )
         
         else:
-            # Generic widget fallback
-            self.create_rectangle(
-                abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
-                fill='#2d3436', outline=border_color, width=border_width,
-                tags=(tag, 'widget', 'element')
-            )
-            text = widget.get_property('text', widget.name)
-            self.create_text(
-                abs_x + widget.width // 2, abs_y + widget.height // 2,
-                text=text, fill='#dfe6e9', font=('Segoe UI', 9),
-                tags=(tag, 'widget', 'element')
-            )
+            # Standard widget - rectangle with text
+            # Use transparent bg for label-like widgets (no fill)
+            if bg_color == 'transparent':
+                # Draw text only with optional selection border
+                text = widget.get_property('text', widget.name)
+                self.create_text(
+                    abs_x, abs_y + widget.height // 2,
+                    text=f"{icon} {text}", fill=text_color, font=('Segoe UI', 9),
+                    anchor='w', tags=(tag, 'widget', 'element')
+                )
+                if widget.selected:
+                    self.create_rectangle(
+                        abs_x - 2, abs_y, abs_x + widget.width + 2, abs_y + widget.height,
+                        fill='', outline=border_color, width=border_width, dash=(2, 2),
+                        tags=(tag, 'widget', 'element')
+                    )
+            else:
+                # Normal widget with background
+                self.create_rectangle(
+                    abs_x, abs_y, abs_x + widget.width, abs_y + widget.height,
+                    fill=bg_color, outline=border_color, width=border_width,
+                    tags=(tag, 'widget', 'element')
+                )
+                text = widget.get_property('text', widget.get_property('placeholder', widget.name))
+                self.create_text(
+                    abs_x + widget.width // 2, abs_y + widget.height // 2,
+                    text=f"{icon} {text}", fill=text_color, font=('Segoe UI', 9),
+                    tags=(tag, 'widget', 'element')
+                )
         
         # Position indicator
         self.create_text(
@@ -631,9 +650,10 @@ class GUICanvas(tk.Canvas):
 class GUIEditPanel(ttk.Frame):
     """Main panel for GUI editing with realtime synchronization"""
     
-    def __init__(self, parent, on_code_change=None):
+    def __init__(self, parent, on_code_change=None, on_element_select=None):
         super().__init__(parent)
         self.on_code_change = on_code_change
+        self.on_element_select = on_element_select  # External callback for element selection
         self.registry = GUINodeRegistry()
         self.registry.load_from_libs()
         self._element_counter = 0
@@ -677,27 +697,13 @@ class GUIEditPanel(ttk.Frame):
         # Refresh button to reload libs
         ttk.Button(toolbar, text="🔄", width=3, command=self._refresh_registry).pack(side=tk.LEFT, padx=2)
         
-        # Main area
-        main_pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
-        main_pane.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Canvas
-        canvas_frame = ttk.Frame(main_pane)
-        main_pane.add(canvas_frame, weight=3)
+        # Main area - just the canvas, no built-in properties panel
+        canvas_frame = ttk.Frame(self)
+        canvas_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.canvas = GUICanvas(canvas_frame, on_change=self._on_canvas_change)
         self.canvas.pack(fill=tk.BOTH, expand=True)
-        self.canvas.on_select = self._on_element_select
-        
-        # Properties panel
-        props_frame = ttk.LabelFrame(main_pane, text="📝 Selected Element")
-        main_pane.add(props_frame, weight=1)
-        
-        self.props_content = ttk.Frame(props_frame)
-        self.props_content.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        self.props_vars = {}
-        self._setup_props_panel()
+        self.canvas.on_select = self._on_element_select_internal
         
         # Info bar
         info_frame = ttk.Frame(self)
@@ -708,146 +714,6 @@ class GUIEditPanel(ttk.Frame):
         
         self.sync_label = ttk.Label(info_frame, text="🔄 LIVE", foreground='#4ec9b0')
         self.sync_label.pack(side=tk.RIGHT, padx=5)
-    
-    def _setup_props_panel(self):
-        """Setup initial empty props panel - will be populated when element selected"""
-        for widget in self.props_content.winfo_children():
-            widget.destroy()
-        
-        self.props_vars = {}
-        self._current_props_element_type = None
-        
-        # Placeholder
-        ttk.Label(self.props_content, text="Select an element to see properties",
-                 foreground='gray').pack(pady=20)
-    
-    def _build_props_for_element(self, element):
-        """Dynamically build properties panel based on element type"""
-        # Clear existing
-        for widget in self.props_content.winfo_children():
-            widget.destroy()
-        
-        self.props_vars = {}
-        self._current_props_element_type = element.element_type
-        
-        # Get properties from registry
-        gui_info = self.registry.nodes.get(element.element_type, {})
-        properties = gui_info.get('properties', [])
-        
-        # If not in registry, use default basic properties
-        if not properties:
-            properties = [
-                {'name': 'name', 'type': 'string'},
-                {'name': 'x', 'type': 'int'},
-                {'name': 'y', 'type': 'int'},
-                {'name': 'width', 'type': 'int'},
-                {'name': 'height', 'type': 'int'},
-            ]
-            if element.element_type == 'window':
-                properties.insert(1, {'name': 'title', 'type': 'string'})
-            else:
-                properties.insert(1, {'name': 'text', 'type': 'string'})
-                properties.append({'name': 'parent', 'type': 'element_ref'})
-        
-        # Type header (read-only)
-        row = ttk.Frame(self.props_content)
-        row.pack(fill=tk.X, pady=2)
-        ttk.Label(row, text="Type:", width=12).pack(side=tk.LEFT)
-        self.props_vars['_type_'] = tk.StringVar(value=f"<{element.element_type}>")
-        ttk.Label(row, textvariable=self.props_vars['_type_'], foreground='#569cd6').pack(side=tk.LEFT)
-        
-        # Create widgets for each property
-        for prop in properties:
-            prop_name = prop['name'] if isinstance(prop, dict) else prop
-            prop_type = prop.get('type', 'string') if isinstance(prop, dict) else 'string'
-            
-            # Skip internal properties
-            if prop_name.startswith('_') or prop_name in ('click_handler',):
-                continue
-            
-            self._create_prop_widget(prop_name, prop_type)
-        
-        # Delete button at bottom
-        ttk.Separator(self.props_content, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
-        ttk.Button(self.props_content, text="🗑️ Delete Element", 
-                  command=self._delete_selected).pack(fill=tk.X, pady=(5, 0))
-    
-    def _create_prop_widget(self, prop_name, prop_type):
-        """Create a property input widget based on type"""
-        row = ttk.Frame(self.props_content)
-        row.pack(fill=tk.X, pady=2)
-        
-        # Label
-        display_name = prop_name.replace('_', ' ').title()
-        ttk.Label(row, text=f"{display_name}:", width=12).pack(side=tk.LEFT)
-        
-        self.props_vars[prop_name] = tk.StringVar()
-        
-        if prop_type == 'bool':
-            var = tk.BooleanVar()
-            self.props_vars[prop_name] = var
-            widget = ttk.Checkbutton(row, variable=var)
-            widget.pack(side=tk.LEFT)
-            var.trace('w', lambda *args: self._on_prop_change())
-            
-        elif prop_type == 'int':
-            widget = ttk.Entry(row, textvariable=self.props_vars[prop_name], width=8)
-            widget.pack(side=tk.LEFT)
-            widget.bind('<KeyRelease>', self._on_prop_change)
-            
-        elif prop_type == 'color':
-            widget = ttk.Entry(row, textvariable=self.props_vars[prop_name], width=10)
-            widget.pack(side=tk.LEFT)
-            widget.bind('<KeyRelease>', self._on_prop_change)
-            
-            # Color preview
-            color_val = self.props_vars[prop_name].get() or '#ffffff'
-            try:
-                preview = tk.Frame(row, width=20, height=20, bg=color_val, relief=tk.RAISED)
-                preview.pack(side=tk.LEFT, padx=2)
-                preview.pack_propagate(False)
-                self.props_vars[f'_{prop_name}_preview'] = preview
-            except:
-                pass
-            
-            # Color picker button
-            pick_btn = ttk.Button(row, text="...", width=3,
-                                  command=lambda n=prop_name: self._pick_color(n))
-            pick_btn.pack(side=tk.LEFT, padx=2)
-            
-        elif prop_type == 'element_ref':
-            # Read-only reference
-            ttk.Label(row, textvariable=self.props_vars[prop_name], 
-                     foreground='#4ec9b0').pack(side=tk.LEFT)
-            
-        elif prop_type == 'size':
-            # Width, Height pair
-            widget = ttk.Entry(row, textvariable=self.props_vars[prop_name], width=15)
-            widget.pack(side=tk.LEFT)
-            widget.bind('<KeyRelease>', self._on_prop_change)
-            
-        else:  # string (default)
-            widget = ttk.Entry(row, textvariable=self.props_vars[prop_name])
-            widget.pack(side=tk.LEFT, fill=tk.X, expand=True)
-            widget.bind('<KeyRelease>', self._on_prop_change)
-    
-    def _pick_color(self, prop_name):
-        """Open color picker for a color property"""
-        current = self.props_vars[prop_name].get() or '#ffffff'
-        try:
-            color = colorchooser.askcolor(color=current, title=f"Vælg {prop_name}")
-            if color[1]:
-                self.props_vars[prop_name].set(color[1])
-                # Update preview
-                preview_key = f'_{prop_name}_preview'
-                if preview_key in self.props_vars:
-                    try:
-                        self.props_vars[preview_key].configure(bg=color[1])
-                    except:
-                        pass
-                self._on_prop_change()
-        except:
-            pass
     
     def _populate_add_menu(self):
         """Populate the Add Item dropdown menu with all available elements from libs"""
@@ -942,90 +808,12 @@ class GUIEditPanel(ttk.Frame):
             # All non-containers are treated as widgets (including graphics/surfaces)
             self._add_widget(gui_info)
 
-    def _on_prop_change(self, event=None):
-        """Handle property change with realtime sync - fully dynamic"""
-        element = self.canvas.selected_element
-        if not element or self._updating_code:
-            return
-        
-        try:
-            # Get properties from registry
-            gui_info = self.registry.nodes.get(element.element_type, {})
-            properties = gui_info.get('properties', [])
-            
-            # Handle each property
-            for prop in properties:
-                prop_name = prop['name'] if isinstance(prop, dict) else prop
-                prop_type = prop.get('type', 'string') if isinstance(prop, dict) else 'string'
-                
-                if prop_name not in self.props_vars:
-                    continue
-                
-                var = self.props_vars[prop_name]
-                
-                # Get value based on type
-                if isinstance(var, tk.BooleanVar):
-                    value = var.get()
-                else:
-                    value = var.get()
-                
-                # Apply value to element
-                if prop_name == 'name':
-                    if value and value != element.name:
-                        if value not in self.canvas.all_elements:
-                            del self.canvas.all_elements[element.name]
-                            element.name = value
-                            self.canvas.all_elements[value] = element
-                elif prop_name == 'x':
-                    if value.isdigit():
-                        element.x = int(value)
-                elif prop_name == 'y':
-                    if value.isdigit():
-                        element.y = int(value)
-                elif prop_name == 'width':
-                    if value.isdigit():
-                        element.width = int(value)
-                elif prop_name == 'height':
-                    if value.isdigit():
-                        element.height = int(value)
-                elif prop_name == 'title' and element.element_type == 'window':
-                    element.set_property('title', value)
-                elif prop_name == 'text':
-                    element.set_property('text', value)
-                elif prop_name == 'size':
-                    # Parse "width, height" format
-                    parts = value.replace(',', ' ').split()
-                    if len(parts) >= 2:
-                        try:
-                            element.width = int(parts[0])
-                            element.height = int(parts[1])
-                        except:
-                            pass
-                elif prop_name not in ('parent',):  # Skip read-only
-                    # Set as custom property
-                    element.set_property(prop_name, value)
-                    
-                    # Update color preview if exists
-                    if prop_type == 'color':
-                        preview_key = f'_{prop_name}_preview'
-                        if preview_key in self.props_vars and value:
-                            try:
-                                self.props_vars[preview_key].configure(bg=value)
-                            except:
-                                pass
-            
-            self.canvas.redraw_all()
-            self._sync_to_code()
-            
-        except Exception as e:
-            pass  # Ignore errors during editing
-    
     def _on_canvas_change(self):
         """Callback when canvas changes (drag etc)"""
         self._sync_to_code()
-        # Update properties panel
-        if self.canvas.selected_element:
-            self._update_props_display(self.canvas.selected_element)
+        # Notify external callback that element may have changed
+        if self.on_element_select and self.canvas.selected_element:
+            self.on_element_select(self.canvas.selected_element, self.registry)
     
     def _sync_to_code(self):
         """Synchronize canvas to code in realtime"""
@@ -1124,13 +912,11 @@ class GUIEditPanel(ttk.Frame):
         
         self.canvas.selected_element = None
         self.canvas.redraw_all()
-        self._setup_props_panel()  # Reset to placeholder
+        # Notify external callback that selection cleared
+        if self.on_element_select:
+            self.on_element_select(None, self.registry)
         self._sync_to_code()
         self.info_var.set("Element deleted")
-    
-    def _clear_props(self):
-        """Clear all property values - kept for compatibility"""
-        self._setup_props_panel()
     
     def _get_next_name(self, prefix):
         self._element_counter += 1
@@ -1194,76 +980,20 @@ class GUIEditPanel(ttk.Frame):
         type_label = element_type if element_type != 'widget' else category
         self.info_var.set(f"Added {type_label} '{name}' to {parent.name}")
     
-    def _on_element_select(self, element):
+    def _on_element_select_internal(self, element):
+        """Internal callback when element is selected - notifies external callback"""
         if element:
-            # Rebuild props panel if element type changed
-            if not hasattr(self, '_current_props_element_type') or \
-               self._current_props_element_type != element.element_type:
-                self._build_props_for_element(element)
-            self._update_props_display(element)
             self.info_var.set(f"Selected: {element.element_type} '{element.name}'")
         else:
-            self._setup_props_panel()  # Reset to placeholder
             self.info_var.set("Click on an element to select")
+        
+        # Call external callback so Properties panel can update
+        if self.on_element_select:
+            self.on_element_select(element, self.registry)
     
-    def _update_props_display(self, element):
-        """Update properties display without triggering sync"""
-        self._updating_code = True
-        try:
-            # Update type display
-            if '_type_' in self.props_vars:
-                self.props_vars['_type_'].set(f"<{element.element_type}>")
-            
-            # Get properties from registry
-            gui_info = self.registry.nodes.get(element.element_type, {})
-            properties = gui_info.get('properties', [])
-            
-            # Update each property value
-            for prop in properties:
-                prop_name = prop['name'] if isinstance(prop, dict) else prop
-                
-                if prop_name not in self.props_vars:
-                    continue
-                
-                # Get value from element
-                if prop_name == 'name':
-                    value = element.name
-                elif prop_name == 'x':
-                    value = str(element.x)
-                elif prop_name == 'y':
-                    value = str(element.y)
-                elif prop_name == 'width':
-                    value = str(element.width)
-                elif prop_name == 'height':
-                    value = str(element.height)
-                elif prop_name == 'title' and element.element_type == 'window':
-                    value = element.get_property('title', '')
-                elif prop_name == 'text':
-                    value = element.get_property('text', '')
-                elif prop_name == 'parent':
-                    value = element.parent.name if element.parent else '(root)'
-                elif prop_name == 'size':
-                    value = f"{element.width}, {element.height}"
-                else:
-                    value = element.get_property(prop_name, '')
-                
-                # Set value in widget
-                var = self.props_vars[prop_name]
-                if isinstance(var, tk.BooleanVar):
-                    var.set(bool(value))
-                else:
-                    var.set(str(value) if value else '')
-                
-                # Update color preview if exists
-                preview_key = f'_{prop_name}_preview'
-                if preview_key in self.props_vars and value:
-                    try:
-                        self.props_vars[preview_key].configure(bg=value)
-                    except:
-                        pass
-                        
-        finally:
-            self._updating_code = False
+    def get_selected_element(self):
+        """Get the currently selected element"""
+        return self.canvas.selected_element
     
     def load_from_code(self, code):
         """Load GUI elements from PyTML code"""
@@ -1288,11 +1018,15 @@ class GUIEditPanel(ttk.Frame):
             self._updating_code = False
     
     def _parse_gui_content(self, content):
-        """Parse GUI content and create elements"""
+        """Parse GUI content and create elements - fully dynamic from registry"""
         windows_by_name = {}
         
-        # Parse windows
-        window_pattern = r'<window\s+([^>]+)>'
+        # Regex pattern that handles > inside quoted values: matches non-quote/non-> OR quoted strings
+        # This fixes parsing of attributes like: backgroundcolor="<bc_value>"
+        ATTR_PATTERN = r'(?:[^>"]*|"[^"]*")*'
+        
+        # Parse windows (containers)
+        window_pattern = rf'<window\s+({ATTR_PATTERN})>'
         for match in re.finditer(window_pattern, content):
             attrs = self._parse_attributes(match.group(1))
             name = attrs.get('name', self._get_next_name('wnd'))
@@ -1307,24 +1041,51 @@ class GUIEditPanel(ttk.Frame):
             
             element = GUIElement('window', name, 50 + len(windows_by_name) * 30, 50, width, height)
             element.set_property('title', title)
+            
+            # Store ALL parsed attributes - preserve colors, etc.
+            for attr_name, attr_value in attrs.items():
+                if attr_name not in ('name', 'title', 'size'):
+                    element.set_property(attr_name, attr_value)
+            
             self.canvas.add_window(element)
             windows_by_name[name] = element
         
-        # Parse widgets
-        widget_patterns = [
-            ('button', r'<button\s+([^>]+)>'),
-            ('label', r'<label\s+([^>]+)>'),
-            ('entry', r'<entry\s+([^>]+)>'),
-        ]
+        # Build dynamic widget patterns from registry
+        # Get all widget categories from registry
+        widget_types = set()
+        for gui_info in self.registry.widgets:
+            category = gui_info.get('category', '')
+            if category:
+                widget_types.add(category)
         
-        for widget_type, pattern in widget_patterns:
+        # Also check for any tags in the content that we might have missed
+        # Find all <tagname ...> patterns - use pattern that handles > in quotes
+        all_tags = set(re.findall(rf'<(\w+)\s+{ATTR_PATTERN}>', content))
+        all_tags.discard('window')  # Already handled
+        all_tags.discard('gui')     # Container tag, not widget
+        
+        # Combine registry widgets + found tags
+        widget_types.update(all_tags)
+        
+        # Parse each widget type dynamically
+        for widget_type in widget_types:
+            # Get gui_info from registry for default size
+            gui_info = self.registry.get_by_category(widget_type) or {}
+            default_size = gui_info.get('default_size', (100, 30))
+            
+            # Use ATTR_PATTERN to handle > inside quoted values
+            pattern = rf'<{widget_type}\s+({ATTR_PATTERN})>'
             for match in re.finditer(pattern, content):
                 attrs = self._parse_attributes(match.group(1))
                 name = attrs.get('name', self._get_next_name(widget_type[:3]))
-                text = attrs.get('text', widget_type.title())
+                text = attrs.get('text', gui_info.get('display_name', widget_type.title()))
                 x = int(attrs.get('x', 10))
                 y = int(attrs.get('y', 10))
                 parent_name = attrs.get('parent')
+                
+                # Get width/height from attrs or default_size
+                width = int(attrs.get('width', default_size[0]))
+                height = int(attrs.get('height', default_size[1]))
                 
                 parent = None
                 if parent_name and parent_name in windows_by_name:
@@ -1332,15 +1093,13 @@ class GUIEditPanel(ttk.Frame):
                 elif windows_by_name:
                     parent = list(windows_by_name.values())[0]
                 
-                if widget_type == 'button':
-                    width, height = 100, 30
-                elif widget_type == 'label':
-                    width, height = 100, 25
-                else:
-                    width, height = 150, 25
-                
                 element = GUIElement(widget_type, name, x, y, width, height)
                 element.set_property('text', text)
+                
+                # Store ALL parsed attributes - preserve colors, etc.
+                for attr_name, attr_value in attrs.items():
+                    if attr_name not in ('name', 'text', 'x', 'y', 'parent', 'width', 'height'):
+                        element.set_property(attr_name, attr_value)
                 
                 if parent:
                     self.canvas.add_widget(element, parent)
@@ -1352,4 +1111,20 @@ class GUIEditPanel(ttk.Frame):
         return attrs
 
 
-__all__ = ['GUINodeRegistry', 'GUIElement', 'GUICanvas', 'GUIEditPanel', 'GUIBlock']
+def get_plugin_info():
+    """Plugin registration for auto-discovery"""
+    return {
+        'name': 'GUIEdit',
+        'panel_type': 'center_tab',
+        'panel_class': GUIEditPanel,
+        'panel_icon': '🎨',
+        'panel_name': 'GUI Editor',
+        'priority': 10,  # Show as first tab after Code
+        'callbacks': {},
+        'menu_items': [
+            {'menu': 'View', 'label': 'Toggle GUI Editor', 'command': 'select_tab'}
+        ]
+    }
+
+
+__all__ = ['GUINodeRegistry', 'GUIElement', 'GUICanvas', 'GUIEditPanel', 'GUIBlock', 'get_plugin_info']
