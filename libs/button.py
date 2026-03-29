@@ -343,6 +343,7 @@ def get_gui_info():
         'icon': '🔘',
         'framework': 'tkinter',
         'default_size': (100, 30),
+        'editor_colors': {'bg': '#0e639c', 'border': '#0e639c', 'text': '#ffffff'},
         'properties': _extract_properties(Button),
         'syntax': '<button text="Button" name="btn1" parent="wnd1" x="0" y="0">'
     }

@@ -530,6 +530,7 @@ def get_gui_info():
         'icon': '🪟',
         'framework': 'tkinter',
         'default_size': (300, 200),
+        'editor_colors': {'bg': '#3c3c3c', 'border': '#569cd6', 'titlebar': '#252526', 'text': '#cccccc'},
         'properties': _extract_properties(Window),
         'syntax': '<window title="Window" size="300","200" name="wnd1">',
         'supports_frameworks': ['tkinter', 'canvas', 'pygame', 'matplotlib', 'turtle'],

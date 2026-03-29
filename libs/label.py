@@ -296,6 +296,7 @@ def get_gui_info():
         'icon': '📝',
         'framework': 'tkinter',
         'default_size': (100, 25),
+        'editor_colors': {'bg': 'transparent', 'border': '#dcdcaa', 'text': '#dcdcaa'},
         'properties': _extract_properties(Label),
         'syntax': '<label text="Label" name="lbl1" parent="wnd1" x="0" y="0">'
     }

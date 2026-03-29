@@ -367,6 +367,7 @@ def get_gui_info():
         'icon': '✏️',
         'framework': 'tkinter',
         'default_size': (150, 25),
+        'editor_colors': {'bg': '#3c3c3c', 'border': '#858585', 'text': '#d4d4d4'},
         'properties': _extract_properties(Entry),
         'syntax': '<entry name="txtInput" parent="wnd1" x="0" y="0">'
     }
