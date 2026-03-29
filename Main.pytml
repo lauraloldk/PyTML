@@ -1,12 +1,13 @@
 <noterminate>
 <var name="counter" value="0">
+<var name ="bc" value="#f7c8fb">
 <gui>
-<window title="Counter: 0" name="wnd1" size="300","200">
+<window name="wnd1" title="Counter: 0" width="300" height="300" backgroundcolor="<bc_value>" size="300","200">
 <wnd1_show>
 <button text="+" name="btn_plus" parent="wnd1" x="20" y="30">
 <button text="-" name="btn_minus" parent="wnd1" x="180" y="30">
 <button text="Exit" name="btn_exit" parent="wnd1" x="100" y="140">
-<label text="0" name="lbl1" parent="wnd1" x="140" y="40">
+<label text="0" name="lbl1" parent="wnd1" x="120" y="70" backgroundcolor="<bc_value>">
 </gui>
 <forever interval="100">
 <if event="<btn_plus_click>">
@@ -23,3 +24,4 @@
 <wnd1_exit>
 </if>
 </forever>
+

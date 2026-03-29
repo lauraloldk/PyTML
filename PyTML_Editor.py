@@ -18,6 +18,7 @@ from plugins.Properties import PropertiesPanel, parse_line_to_element
 from plugins.GUIEdit import GUIEditPanel
 from plugins.references import ReferencesPanel
 from plugins.Visual import VisualProgrammingPanel
+from plugins.LibEditor import open_lib_editor
 from EditorBlocks import EditorBlockParser, EditorState
 
 
@@ -73,6 +74,11 @@ class PyTMLEditor:
         view_menu.add_command(label="Toggle GUI Editor", command=self._toggle_gui_editor)
         view_menu.add_command(label="Toggle Visual Editor", command=self._toggle_visual_editor)
         view_menu.add_command(label="Show All References", command=self._show_references)
+        
+        # Tools menu
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+        tools_menu.add_command(label="Library Editor...", command=self._open_lib_editor)
     
     def _setup_ui(self):
         """Setup UI components with plugins"""
@@ -406,6 +412,10 @@ class PyTMLEditor:
     def _show_references(self):
         """Switch to References tab"""
         self.mode_notebook.select(3)
+    
+    def _open_lib_editor(self):
+        """Open the Library Editor window"""
+        open_lib_editor(self.root)
     
     def _on_tab_change(self, event):
         """Handle tab switch - sync the target tab from code"""

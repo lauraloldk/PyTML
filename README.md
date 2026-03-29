@@ -133,7 +133,6 @@ PyTML/
 ├── Main.py              # Entry point - runs .pytml files
 ├── Compiler.py          # Core compiler and AST nodes
 ├── PyTML_Editor.py      # Visual editor for PyTML
-├── LibEditor.py         # Tool for extending PyTML with Python libraries
 ├── libs/                # Core library modules
 │   ├── core.py          # Base classes (ActionNode, WidgetNode, etc.)
 │   ├── registry.py      # Tag registry and semantic analyzer
@@ -146,10 +145,12 @@ PyTML/
 │   ├── output.py        # Console output
 │   └── console_utils.py # Terminal utilities
 └── plugins/             # Editor plugins
-    ├── Objects.py
-    ├── Properties.py
-    ├── GUIEdit.py
-    └── references.py
+    ├── Objects.py       # Object browser panel
+    ├── Properties.py    # Property editor panel
+    ├── GUIEdit.py       # Visual GUI editor
+    ├── Visual.py        # Block-based visual programming
+    ├── references.py    # API reference browser
+    └── LibEditor.py     # Python module browser (read-only)
 ```
 
 ## Available Tags
@@ -174,12 +175,6 @@ PyTML/
 Visual drag-and-drop editor for creating PyTML applications:
 ```bash
 python PyTML_Editor.py
-```
-
-### Library Editor
-Extend PyTML by adding support for any Python library:
-```bash
-python LibEditor.py
 ```
 
 ## Contributing
