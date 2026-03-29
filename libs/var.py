@@ -318,43 +318,43 @@ class VarNode(ActionNode):
 def get_line_parsers():
     """Returner linje parsere for var modulet"""
     return [
-        # <var name="x" value="..."> (med value)
-        (r'<var\s+name="(\w+)"\s+value="([^"]*)">', _parse_var_with_value),
+        # <var name="x" value="..."> (med value) - tillader mellemrum omkring =
+        (r'<var\s+name\s*=\s*"(\w+)"\s+value\s*=\s*"([^"]*)">', _parse_var_with_value),
         # <var name="x" value=<ref_value>> (med variabel reference)
-        (r'<var\s+name="(\w+)"\s+value=<(\w+)_value>>', _parse_var_with_ref),
+        (r'<var\s+name\s*=\s*"(\w+)"\s+value\s*=\s*<(\w+)_value>>', _parse_var_with_ref),
         # <var name="x" value=<input>> (med input prompt)
-        (r'<var\s+name="(\w+)"\s+value=<input>>', _parse_var_with_input),
+        (r'<var\s+name\s*=\s*"(\w+)"\s+value\s*=\s*<input>>', _parse_var_with_input),
         # <var name="x" value=<input prompt="...">>(med input prompt)
-        (r'<var\s+name="(\w+)"\s+value=<input\s+prompt="([^"]*)">>', _parse_var_with_input_prompt),
+        (r'<var\s+name\s*=\s*"(\w+)"\s+value\s*=\s*<input\s+prompt\s*=\s*"([^"]*)">>', _parse_var_with_input_prompt),
         # <var name="x" value=<input "...">> (prompt i quotes)
-        (r'<var\s+name="(\w+)"\s+value=<input\s+"([^"]*)">>', _parse_var_with_input_prompt),
+        (r'<var\s+name\s*=\s*"(\w+)"\s+value\s*=\s*<input\s+"([^"]*)">>', _parse_var_with_input_prompt),
         # <var name="x"> (uden value)
-        (r'<var\s+name="(\w+)">', _parse_var_declaration),
+        (r'<var\s+name\s*=\s*"(\w+)">', _parse_var_declaration),
         # <x_value="..."> (sæt værdi)
-        (r'<(\w+)_value="([^"]*)">', _parse_var_value),
+        (r'<(\w+)_value\s*=\s*"([^"]*)">', _parse_var_value),
         
         # === MATEMATIK ===
         # <math var="x" op="+=" value="1">
-        (r'<math\s+var="(\w+)"\s+op="([^"]+)"\s+value="([^"]*)">', _parse_math_full),
+        (r'<math\s+var\s*=\s*"(\w+)"\s+op\s*=\s*"([^"]+)"\s+value\s*=\s*"([^"]*)">', _parse_math_full),
         # <math var="x" op="++" > eller <math var="x" op="inc">
-        (r'<math\s+var="(\w+)"\s+op="(\+\+|--|inc|dec)">', _parse_math_inc_dec),
+        (r'<math\s+var\s*=\s*"(\w+)"\s+op\s*=\s*"(\+\+|--|inc|dec)">', _parse_math_inc_dec),
         # Shorthand: <x_value += 1> eller <x_value++>
         (r'<(\w+)_value\s*(\+\+|--)>', _parse_math_shorthand_incdec),
         (r'<(\w+)_value\s*(\+=|-=|\*=|/=|//=|%=|\*\*=|=)\s*(.+)>', _parse_math_shorthand),
         
         # === ALIASES: <variable> === 
         # <variable name="x" value="..."> (med value) - alias for <var>
-        (r'<variable\s+name="(\w+)"\s+value="([^"]*)">', _parse_var_with_value),
+        (r'<variable\s+name\s*=\s*"(\w+)"\s+value\s*=\s*"([^"]*)">', _parse_var_with_value),
         # <variable name="x" value=<ref_value>> (med variabel reference)
-        (r'<variable\s+name="(\w+)"\s+value=<(\w+)_value>>', _parse_var_with_ref),
+        (r'<variable\s+name\s*=\s*"(\w+)"\s+value\s*=\s*<(\w+)_value>>', _parse_var_with_ref),
         # <variable name="x" value=<input>>
-        (r'<variable\s+name="(\w+)"\s+value=<input>>', _parse_var_with_input),
+        (r'<variable\s+name\s*=\s*"(\w+)"\s+value\s*=\s*<input>>', _parse_var_with_input),
         # <variable name="x" value=<input prompt="...">>
-        (r'<variable\s+name="(\w+)"\s+value=<input\s+prompt="([^"]*)">>', _parse_var_with_input_prompt),
+        (r'<variable\s+name\s*=\s*"(\w+)"\s+value\s*=\s*<input\s+prompt\s*=\s*"([^"]*)">>', _parse_var_with_input_prompt),
         # <variable name="x" value=<input "...">>
-        (r'<variable\s+name="(\w+)"\s+value=<input\s+"([^"]*)">>', _parse_var_with_input_prompt),
+        (r'<variable\s+name\s*=\s*"(\w+)"\s+value\s*=\s*<input\s+"([^"]*)">>', _parse_var_with_input_prompt),
         # <variable name="x"> (uden value)
-        (r'<variable\s+name="(\w+)">', _parse_var_declaration),
+        (r'<variable\s+name\s*=\s*"(\w+)">', _parse_var_declaration),
     ]
 
 

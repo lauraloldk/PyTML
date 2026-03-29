@@ -9,6 +9,8 @@ Syntax:
     <txtInput_value="Startværdi">
     <txtInput_placeholder="Hint tekst">
     <txtInput_readonly="true">
+    <txtInput_backgroundcolor="#ffffcc">
+    <txtInput_textcolor="#333333">
 """
 
 import tkinter as tk
@@ -64,6 +66,8 @@ class Entry:
         self._tk_entry = None
         self._tk_var = None
         self._ready = False
+        self._backgroundcolor = None
+        self._textcolor = None
     
     def create(self, parent_window):
         """Opret entry i et vindue"""
@@ -71,7 +75,7 @@ class Entry:
         tk_win = parent_window.get_tk_window()
         if tk_win:
             self._tk_var = tk.StringVar()
-            self._tk_entry = ttk.Entry(tk_win, textvariable=self._tk_var)
+            self._tk_entry = tk.Entry(tk_win, textvariable=self._tk_var)
             self._tk_entry.place(x=self.x, y=self.y, width=self.width, height=self.height)
             
             # Placeholder support
@@ -136,6 +140,20 @@ class Entry:
         self.y = y
         if self._tk_entry:
             self._tk_entry.place(x=x, y=y)
+        return self
+    
+    def set_backgroundcolor(self, color):
+        """Sæt baggrundsfarve"""
+        self._backgroundcolor = color
+        if self._tk_entry:
+            self._tk_entry.configure(background=color)
+        return self
+    
+    def set_textcolor(self, color):
+        """Sæt tekstfarve"""
+        self._textcolor = color
+        if self._tk_entry:
+            self._tk_entry.configure(foreground=color)
         return self
     
     def is_ready(self):
@@ -212,6 +230,15 @@ class EntryNode(ActionNode):
                 parent_window = context['windows'].get(parent_name)
                 if parent_window:
                     entry.create(parent_window)
+                    
+                    # Anvend alle ekstra attributter via set_* metoder
+                    skip_attrs = {'name', 'parent', 'x', 'y', 'width', 'height', 'placeholder'}
+                    for pytml_name, value in resolved.items():
+                        if pytml_name in skip_attrs:
+                            continue
+                        setter_name = f'set_{pytml_name}'
+                        if hasattr(entry, setter_name):
+                            getattr(entry, setter_name)(value)
         
         self._ready = True
         self._executed = True
@@ -332,7 +359,7 @@ def _parse_entry_readonly(match, current, context):
 
 # GUI Editor info
 def get_gui_info():
-    """Return GUI editor information"""
+    """Return GUI editor information - dynamically extracted"""
     return {
         'type': 'widget',
         'category': 'entry',
@@ -340,9 +367,59 @@ def get_gui_info():
         'icon': '✏️',
         'framework': 'tkinter',
         'default_size': (150, 25),
-        'properties': ['name', 'x', 'y', 'width', 'height', 'parent', 'placeholder'],
+        'properties': _extract_properties(Entry),
         'syntax': '<entry name="txtInput" parent="wnd1" x="0" y="0">'
     }
+
+
+def _extract_properties(cls):
+    """Dynamically extract all properties from a class"""
+    import inspect
+    props = []
+    
+    # From __init__ parameters
+    try:
+        sig = inspect.signature(cls.__init__)
+        for name, param in sig.parameters.items():
+            if name != 'self' and not name.startswith('_'):
+                prop_info = {'name': name, 'type': 'string'}
+                if param.default != inspect.Parameter.empty:
+                    default = param.default
+                    prop_info['default'] = default
+                    if isinstance(default, bool):
+                        prop_info['type'] = 'bool'
+                    elif isinstance(default, int):
+                        prop_info['type'] = 'int'
+                    elif isinstance(default, str) and default.startswith('#'):
+                        prop_info['type'] = 'color'
+                if 'color' in name.lower():
+                    prop_info['type'] = 'color'
+                props.append(prop_info)
+    except:
+        pass
+    
+    # From set_* methods
+    for method_name in dir(cls):
+        if method_name.startswith('set_') and not method_name.startswith('set__'):
+            prop_name = method_name[4:]  # Remove 'set_'
+            # Skip internal/deprecated methods
+            if prop_name in ('position',):
+                continue
+            if not any(p['name'] == prop_name for p in props):
+                prop_info = {'name': prop_name, 'type': 'string'}
+                if 'color' in prop_name.lower():
+                    prop_info['type'] = 'color'
+                elif prop_name in ('enabled', 'readonly', 'visible'):
+                    prop_info['type'] = 'bool'
+                elif prop_name in ('x', 'y', 'width', 'height'):
+                    prop_info['type'] = 'int'
+                props.append(prop_info)
+    
+    # Add parent for widgets
+    if not any(p['name'] == 'parent' for p in props):
+        props.append({'name': 'parent', 'type': 'element_ref'})
+    
+    return props
 
 
 # Eksporter

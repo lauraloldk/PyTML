@@ -10,6 +10,7 @@ Syntax:
     <wnd1_hide>
     <wnd1_title="Ny Titel">
     <wnd1_size="400","500">
+    <wnd1_backgroundcolor="#ff0000">
 """
 
 import tkinter as tk
@@ -29,6 +30,7 @@ class ActionNode:
         self.parent = None
         self._ready = False
         self._executed = False
+        self._backgroundcolor = None
     
     def add_child(self, child):
         child.parent = self
@@ -68,6 +70,7 @@ class Window:
         self._widgets = {}
         self._canvas = None  # For canvas-based graphics
         self._embed_frame = None  # For embedding external surfaces
+        self._backgroundcolor = None
     
     def _create_window(self):
         """Opret det faktiske tkinter vindue"""
@@ -133,6 +136,9 @@ class Window:
     def show(self):
         """Vis vinduet"""
         self._create_window()
+        # Anvend gemte attributter efter vinduet er oprettet
+        if self._backgroundcolor:
+            self._tk_window.configure(bg=self._backgroundcolor)
         self._tk_window.deiconify()
         self.visible = True
         self._ready = True
@@ -177,6 +183,13 @@ class Window:
         self.height = height
         if self._tk_window:
             self._tk_window.geometry(f"{self.width}x{self.height}")
+        return self
+    
+    def set_backgroundcolor(self, color):
+        """Sæt vinduets baggrundsfarve"""
+        self._backgroundcolor = color
+        if self._tk_window:
+            self._tk_window.configure(bg=color)
         return self
     
     def add_child(self, child):
@@ -294,7 +307,16 @@ class WindowNode(ActionNode):
             # Sørg for at windows store eksisterer
             if 'windows' not in context:
                 context['windows'] = WindowStore()
-            context['windows'].create(name, title, width, height)
+            window = context['windows'].create(name, title, width, height)
+            
+            # Anvend alle ekstra attributter via set_* metoder
+            skip_attrs = {'name', 'title', 'size'}
+            for pytml_name, value in resolved.items():
+                if pytml_name in skip_attrs:
+                    continue
+                setter_name = f'set_{pytml_name}'
+                if hasattr(window, setter_name):
+                    getattr(window, setter_name)(value)
         
         self._ready = True
         self._executed = True
@@ -379,38 +401,27 @@ def get_line_parsers():
 
 def _parse_window_declaration(match, current, context):
     """
-    Parse <window title="Test" size="300","350" name="wnd1">
-    Understøtter også: <window title=<title_value> name="wnd1">
+    Parse <window title="Test" size="300","350" name="wnd1" backgroundcolor="#ff0000">
+    Understøtter alle attributter dynamisk
     """
     import re
     attrs_str = match.group(1)
     
     attributes = {}
     
-    # Parse title="..." eller title=<var_value>
-    title_match = re.search(r'title=(?:"([^"]*)"|(<\w+_value>))', attrs_str)
-    if title_match:
-        if title_match.group(1) is not None:
-            attributes['title'] = title_match.group(1)
+    # Parse alle key="value" eller key=<var_value> attributter generisk
+    # Matcher: key="value" eller key=<var_value>
+    attr_pattern = r'(\w+)=(?:"([^"]*)"|(<\w+_value>))'
+    for attr_match in re.finditer(attr_pattern, attrs_str):
+        key = attr_match.group(1)
+        if attr_match.group(2) is not None:
+            value = attr_match.group(2)
+            # Special handling for size som kan være "300","200"
+            if key == 'size':
+                value = parse_stack_args(f'"{value}"')
         else:
-            attributes['title'] = title_match.group(2)  # Gem som <var_value> for resolve
-    
-    # Parse name="..." eller name=<var_value>
-    name_match = re.search(r'name=(?:"(\w+)"|(<\w+_value>))', attrs_str)
-    if name_match:
-        if name_match.group(1) is not None:
-            attributes['name'] = name_match.group(1)
-        else:
-            attributes['name'] = name_match.group(2)
-    
-    # Parse size="300","350" eller size=<var_value> eller size="300"
-    size_match = re.search(r'size=(?:("[\d,"\s]+"|"\d+")|(<\w+_value>))', attrs_str)
-    if size_match:
-        if size_match.group(1) is not None:
-            size_str = size_match.group(1)
-            attributes['size'] = parse_stack_args(size_str)
-        else:
-            attributes['size'] = size_match.group(2)
+            value = attr_match.group(3)  # Gem som <var_value> for resolve
+        attributes[key] = value
     
     node = WindowNode('window', attributes)
     current.add_child(node)
@@ -505,7 +516,7 @@ def _parse_window_size(match, current, context):
 
 # GUI Editor info
 def get_gui_info():
-    """Return GUI editor information
+    """Return GUI editor information - dynamically extracted
     
     This window container can host:
     - Native tkinter widgets (Button, Label, Entry, etc.)
@@ -519,11 +530,56 @@ def get_gui_info():
         'icon': '🪟',
         'framework': 'tkinter',
         'default_size': (300, 200),
-        'properties': ['name', 'title', 'size'],
+        'properties': _extract_properties(Window),
         'syntax': '<window title="Window" size="300","200" name="wnd1">',
         'supports_frameworks': ['tkinter', 'canvas', 'pygame', 'matplotlib', 'turtle'],
         'description': 'A window container that can host tkinter widgets, canvas graphics, or embedded surfaces'
     }
+
+
+def _extract_properties(cls):
+    """Dynamically extract all properties from a class"""
+    import inspect
+    props = []
+    
+    # From __init__ parameters
+    try:
+        sig = inspect.signature(cls.__init__)
+        for name, param in sig.parameters.items():
+            if name != 'self' and not name.startswith('_'):
+                prop_info = {'name': name, 'type': 'string'}
+                if param.default != inspect.Parameter.empty:
+                    default = param.default
+                    prop_info['default'] = default
+                    if isinstance(default, bool):
+                        prop_info['type'] = 'bool'
+                    elif isinstance(default, int):
+                        prop_info['type'] = 'int'
+                    elif isinstance(default, str) and default.startswith('#'):
+                        prop_info['type'] = 'color'
+                if 'color' in name.lower():
+                    prop_info['type'] = 'color'
+                props.append(prop_info)
+    except:
+        pass
+    
+    # From set_* methods
+    for method_name in dir(cls):
+        if method_name.startswith('set_') and not method_name.startswith('set__'):
+            prop_name = method_name[4:]  # Remove 'set_'
+            if not any(p['name'] == prop_name for p in props):
+                prop_info = {'name': prop_name, 'type': 'string'}
+                if 'color' in prop_name.lower():
+                    prop_info['type'] = 'color'
+                elif prop_name in ('enabled', 'readonly', 'visible'):
+                    prop_info['type'] = 'bool'
+                elif prop_name in ('x', 'y', 'width', 'height'):
+                    prop_info['type'] = 'int'
+                elif prop_name == 'size':
+                    prop_info['type'] = 'size'
+                props.append(prop_info)
+    
+    return props
 
 
 # Marker som GUI Node type

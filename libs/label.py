@@ -7,6 +7,8 @@ Syntax:
     <label text="Hej verden" name="lbl1" parent="wnd1">
     <label text=<greeting_value> name="lbl1" parent="wnd1" x="10" y="50">
     <lbl1_text="Ny tekst">
+    <lbl1_backgroundcolor="#0000ff">
+    <lbl1_textcolor="#ffffff">
 """
 
 import tkinter as tk
@@ -63,13 +65,15 @@ class Label:
         self.parent_window = None
         self._tk_label = None
         self._ready = False
+        self._backgroundcolor = None
+        self._textcolor = None
     
     def create(self, parent_window):
         """Opret label i et vindue"""
         self.parent_window = parent_window
         tk_win = parent_window.get_tk_window()
         if tk_win:
-            self._tk_label = ttk.Label(tk_win, text=self.text)
+            self._tk_label = tk.Label(tk_win, text=self.text)
             self._tk_label.place(x=self.x, y=self.y, width=self.width, height=self.height)
         self._ready = True
         return self
@@ -94,6 +98,17 @@ class Label:
         self.foreground = color
         if self._tk_label:
             self._tk_label.config(foreground=color)
+        return self
+    
+    def set_textcolor(self, color):
+        """Sæt tekstfarve (alias for set_foreground)"""
+        return self.set_foreground(color)
+    
+    def set_backgroundcolor(self, color):
+        """Sæt baggrundsfarve"""
+        self._backgroundcolor = color
+        if self._tk_label:
+            self._tk_label.config(background=color)
         return self
     
     def is_ready(self):
@@ -162,6 +177,15 @@ class LabelNode(ActionNode):
                 parent_window = context['windows'].get(parent_name)
                 if parent_window:
                     label.create(parent_window)
+                    
+                    # Anvend alle ekstra attributter via set_* metoder
+                    skip_attrs = {'name', 'text', 'parent', 'x', 'y', 'width', 'height'}
+                    for pytml_name, value in resolved.items():
+                        if pytml_name in skip_attrs:
+                            continue
+                        setter_name = f'set_{pytml_name}'
+                        if hasattr(label, setter_name):
+                            getattr(label, setter_name)(value)
         
         self._ready = True
         self._executed = True
@@ -264,7 +288,7 @@ def _parse_label_text_ref(match, current, context):
 
 # GUI Editor info
 def get_gui_info():
-    """Return GUI editor information"""
+    """Return GUI editor information - dynamically extracted"""
     return {
         'type': 'widget',
         'category': 'label',
@@ -272,9 +296,59 @@ def get_gui_info():
         'icon': '📝',
         'framework': 'tkinter',
         'default_size': (100, 25),
-        'properties': ['name', 'text', 'x', 'y', 'width', 'height', 'parent'],
+        'properties': _extract_properties(Label),
         'syntax': '<label text="Label" name="lbl1" parent="wnd1" x="0" y="0">'
     }
+
+
+def _extract_properties(cls):
+    """Dynamically extract all properties from a class"""
+    import inspect
+    props = []
+    
+    # From __init__ parameters
+    try:
+        sig = inspect.signature(cls.__init__)
+        for name, param in sig.parameters.items():
+            if name != 'self' and not name.startswith('_'):
+                prop_info = {'name': name, 'type': 'string'}
+                if param.default != inspect.Parameter.empty:
+                    default = param.default
+                    prop_info['default'] = default
+                    if isinstance(default, bool):
+                        prop_info['type'] = 'bool'
+                    elif isinstance(default, int):
+                        prop_info['type'] = 'int'
+                    elif isinstance(default, str) and default.startswith('#'):
+                        prop_info['type'] = 'color'
+                if 'color' in name.lower():
+                    prop_info['type'] = 'color'
+                props.append(prop_info)
+    except:
+        pass
+    
+    # From set_* methods
+    for method_name in dir(cls):
+        if method_name.startswith('set_') and not method_name.startswith('set__'):
+            prop_name = method_name[4:]  # Remove 'set_'
+            # Skip internal/deprecated methods
+            if prop_name in ('position', 'foreground'):
+                continue
+            if not any(p['name'] == prop_name for p in props):
+                prop_info = {'name': prop_name, 'type': 'string'}
+                if 'color' in prop_name.lower():
+                    prop_info['type'] = 'color'
+                elif prop_name in ('enabled', 'readonly', 'visible'):
+                    prop_info['type'] = 'bool'
+                elif prop_name in ('x', 'y', 'width', 'height'):
+                    prop_info['type'] = 'int'
+                props.append(prop_info)
+    
+    # Add parent for widgets
+    if not any(p['name'] == 'parent' for p in props):
+        props.append({'name': 'parent', 'type': 'element_ref'})
+    
+    return props
 
 
 # Eksporter

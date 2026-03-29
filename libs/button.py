@@ -6,9 +6,11 @@ Understøtter variabel-interpolation i alle argumenter.
 Syntax:
     <button text="Klik her" name="btn1" parent="wnd1">
     <button text=<btntext_value> name="btn1" parent="wnd1" x="10" y="50">
-    <btn1_click="action">
+    <btn1_click>
     <btn1_text="Ny tekst">
     <btn1_enabled="true">
+    <btn1_backgroundcolor="#00ff00">
+    <btn1_textcolor="#ffffff">
 """
 
 import tkinter as tk
@@ -20,29 +22,6 @@ from libs.var import resolve_value, resolve_attributes
 
 # Marker som GUI Node type
 GUI_NODE_TYPE = "widget"
-
-# PyTML navn -> tkinter navn mapping
-# LibEditor tilføjer automatisk nye entries her
-CONFIG_MAP = {
-    # Farver
-    'clickcolor': 'activebackground',
-    'frontcolor': 'fg',
-    'foreground': 'fg',
-    'background': 'bg',
-    'textcolor': 'fg',
-    'hovercolor': 'activebackground',
-    # Tekst
-    'text': 'text',
-    # Tilstand
-    'enabled': 'state',
-    'disabled': 'state',
-    # Font
-    'fontsize': 'font',
-    'fontfamily': 'font',
-    # Cursor
-    'cursor': 'cursor',
-    'pointer': 'cursor',
-}
 
 
 class ActionNode:
@@ -88,6 +67,9 @@ class Button:
         self._click_handler = None
         self._context = None  # Reference til PyTML context for events
         self._ready = False
+        self._backgroundcolor = None
+        self._textcolor = None
+        
     
     def create(self, parent_window, context=None, **extra_config):
         """Opret knappen i et vindue"""
@@ -140,6 +122,20 @@ class Button:
         self.y = y
         if self._tk_button:
             self._tk_button.place(x=x, y=y)
+        return self
+    
+    def set_backgroundcolor(self, color):
+        """Sæt knappens baggrundsfarve"""
+        self._backgroundcolor = color
+        if self._tk_button:
+            self._tk_button.configure(bg=color)
+        return self
+    
+    def set_textcolor(self, color):
+        """Sæt knappens tekstfarve"""
+        self._textcolor = color
+        if self._tk_button:
+            self._tk_button.configure(fg=color)
         return self
 
     def set_clickcolor(self, value):
@@ -219,21 +215,21 @@ class ButtonNode(ActionNode):
             
             button = context['buttons'].create(name, text, x, y, width, height)
             
-            # Automatisk map alle PyTML attributter til tkinter via CONFIG_MAP
-            extra_config = {}
-            skip_attrs = {'name', 'text', 'parent', 'x', 'y', 'width', 'height'}
-            for pytml_name, value in resolved.items():
-                if pytml_name in skip_attrs:
-                    continue
-                # Slå op i CONFIG_MAP - hvis ikke fundet, brug navnet direkte
-                tk_name = CONFIG_MAP.get(pytml_name, pytml_name)
-                extra_config[tk_name] = value
-            
             # Tilføj til parent vindue hvis angivet
             if parent_name and 'windows' in context:
                 parent_window = context['windows'].get(parent_name)
                 if parent_window:
-                    button.create(parent_window, context, **extra_config)  # Send context og config
+                    button.create(parent_window, context)
+                    
+                    # Anvend alle ekstra attributter via set_* metoder
+                    skip_attrs = {'name', 'text', 'parent', 'x', 'y', 'width', 'height'}
+                    for pytml_name, value in resolved.items():
+                        if pytml_name in skip_attrs:
+                            continue
+                        # Kald set_<attribut>() hvis den findes
+                        setter_name = f'set_{pytml_name}'
+                        if hasattr(button, setter_name):
+                            getattr(button, setter_name)(value)
         
         self._ready = True
         self._executed = True
@@ -339,7 +335,7 @@ def _parse_button_enabled(match, current, context):
 
 # GUI Editor info
 def get_gui_info():
-    """Return GUI editor information"""
+    """Return GUI editor information - dynamically extracted"""
     return {
         'type': 'widget',
         'category': 'button',
@@ -347,9 +343,59 @@ def get_gui_info():
         'icon': '🔘',
         'framework': 'tkinter',
         'default_size': (100, 30),
-        'properties': ['name', 'text', 'x', 'y', 'width', 'height', 'parent'],
+        'properties': _extract_properties(Button),
         'syntax': '<button text="Button" name="btn1" parent="wnd1" x="0" y="0">'
     }
+
+
+def _extract_properties(cls):
+    """Dynamically extract all properties from a class"""
+    import inspect
+    props = []
+    
+    # From __init__ parameters
+    try:
+        sig = inspect.signature(cls.__init__)
+        for name, param in sig.parameters.items():
+            if name != 'self' and not name.startswith('_'):
+                prop_info = {'name': name, 'type': 'string'}
+                if param.default != inspect.Parameter.empty:
+                    default = param.default
+                    prop_info['default'] = default
+                    if isinstance(default, bool):
+                        prop_info['type'] = 'bool'
+                    elif isinstance(default, int):
+                        prop_info['type'] = 'int'
+                    elif isinstance(default, str) and default.startswith('#'):
+                        prop_info['type'] = 'color'
+                if 'color' in name.lower():
+                    prop_info['type'] = 'color'
+                props.append(prop_info)
+    except:
+        pass
+    
+    # From set_* methods
+    for method_name in dir(cls):
+        if method_name.startswith('set_') and not method_name.startswith('set__'):
+            prop_name = method_name[4:]  # Remove 'set_'
+            # Skip internal/deprecated methods
+            if prop_name in ('click_handler', 'position', 'frontcolor'):
+                continue
+            if not any(p['name'] == prop_name for p in props):
+                prop_info = {'name': prop_name, 'type': 'string'}
+                if 'color' in prop_name.lower():
+                    prop_info['type'] = 'color'
+                elif prop_name in ('enabled', 'readonly', 'visible'):
+                    prop_info['type'] = 'bool'
+                elif prop_name in ('x', 'y', 'width', 'height'):
+                    prop_info['type'] = 'int'
+                props.append(prop_info)
+    
+    # Add parent for widgets
+    if not any(p['name'] == 'parent' for p in props):
+        props.append({'name': 'parent', 'type': 'element_ref'})
+    
+    return props
 
 
 # Eksporter
