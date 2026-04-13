@@ -3,6 +3,8 @@ PyTML Console Utils Module
 Håndterer konsol-relaterede funktioner som noterminate/noquit
 """
 
+from libs.core import ActionNode
+
 # Global flag for om programmet skal vente på bruger input før lukning
 _no_terminate = False
 
@@ -32,33 +34,6 @@ def reset():
     """Reset alle console-utils indstillinger"""
     global _no_terminate
     _no_terminate = False
-
-
-class ActionNode:
-    """Base klasse for actions - importeret her for at undgå circular imports"""
-    
-    def __init__(self, tag_name, attributes=None):
-        self.tag_name = tag_name
-        self.attributes = attributes or {}
-        self.children = []
-        self.parent = None
-        self._ready = False
-        self._executed = False
-    
-    def add_child(self, child):
-        child.parent = self
-        self.children.append(child)
-        return child
-    
-    def children_ready(self):
-        return all(child.is_ready() for child in self.children)
-    
-    def is_ready(self):
-        return self._ready and self.children_ready()
-    
-    def execute(self, context):
-        self._ready = True
-        self._executed = True
 
 
 class NoTerminateNode(ActionNode):

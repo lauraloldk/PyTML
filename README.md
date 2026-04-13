@@ -8,6 +8,8 @@
 - ⚡ **Event-Driven** - Handle clicks and user input with intuitive event syntax
 - 🔢 **Built-in Math** - Support for inline math operations (`+=`, `-=`, `++`, `--`)
 - 🔄 **Reactive Updates** - Dynamic property binding with variable references
+- 📦 **Layout Containers** - `<vbox>` / `<hbox>` for automatic widget placement
+- 🔍 **Lint + Quick Fixes** - Built-in static analysis with one-click fixes
 - 🧩 **Extensible** - Plugin system and library editor for adding custom components
 
 ## Quick Start
@@ -141,6 +143,7 @@ PyTML/
 │   ├── button.py        # Button widget
 │   ├── label.py         # Label widget
 │   ├── entry.py         # Text entry widget
+│   ├── layout.py        # Layout containers (VBox, HBox)
 │   ├── input.py         # Console input
 │   ├── output.py        # Console output
 │   └── console_utils.py # Terminal utilities
@@ -148,7 +151,7 @@ PyTML/
     ├── Objects.py       # Object browser panel
     ├── Properties.py    # Property editor panel
     ├── GUIEdit.py       # Visual GUI editor
-    ├── Visual.py        # Block-based visual programming
+    ├── LintFix.py       # Lint + Quick Fixes panel
     ├── references.py    # API reference browser
     └── LibEditor.py     # Python module browser (read-only)
 ```
@@ -162,12 +165,44 @@ PyTML/
 | `<button>` | Create a button | `<button text="OK" name="btn" parent="w" x="10" y="10">` |
 | `<label>` | Create a label | `<label text="Hi" name="lbl" parent="w" x="10" y="50">` |
 | `<entry>` | Create text input | `<entry name="inp" parent="w" x="10" y="90">` |
+| `<vbox>` | Vertical layout box | `<vbox name="vb" parent="w" x="0" y="0" width="200" height="300">` |
+| `<hbox>` | Horizontal layout box | `<hbox name="hb" parent="w" x="0" y="0" width="300" height="50">` |
 | `<output>` | Print to console | `<output value="Hello">` |
 | `<input>` | Read from console | `<input var="name" prompt="Enter name:">` |
 | `<if>` | Conditional block | `<if condition="<x_value> > 5">` |
 | `<forever>` | Event loop | `<forever interval="100">` |
 | `<math>` | Math expression | `<math result="<a> + <b>">` |
 | `<noterminate>` | Keep console open | `<noterminate>` |
+
+### Layout Containers
+
+`<vbox>` and `<hbox>` are layout containers that stack child widgets automatically
+without requiring explicit `x`/`y` coordinates on each child.
+
+**Supported properties:** `name`, `parent`, `x`, `y`, `width`, `height`,
+`padding`, `spacing`, `align` (`start`/`center`/`end`), `fill` (`none`/`x`/`y`/`both`).
+
+```xml
+<gui>
+<window name="wnd1" title="Layout Demo" size="300","400">
+<wnd1_show>
+<!-- Vertical stack inside the window -->
+<vbox name="vbox1" parent="wnd1" x="10" y="10" width="280" height="380" padding="8" spacing="6">
+<button text="Button A" name="btnA" parent="vbox1">
+<button text="Button B" name="btnB" parent="vbox1">
+<label  text="A label"  name="lbl1" parent="vbox1">
+<entry  name="input1"               parent="vbox1">
+</gui>
+```
+
+Horizontal stacking:
+
+```xml
+<hbox name="toolbar" parent="wnd1" x="0" y="0" width="400" height="40">
+<button text="File" name="menuFile" parent="toolbar">
+<button text="Edit" name="menuEdit" parent="toolbar">
+<button text="View" name="menuView" parent="toolbar">
+```
 
 ## Tools
 
@@ -176,6 +211,11 @@ Visual drag-and-drop editor for creating PyTML applications:
 ```bash
 python PyTML_Editor.py
 ```
+
+The editor includes:
+- **Objects panel** – browse all available tags and insert them
+- **Properties panel** – edit element properties visually
+- **Lint panel** – real-time static analysis with quick fixes
 
 ## Contributing
 
