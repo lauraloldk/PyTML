@@ -35,10 +35,12 @@ class PyTMLEditor:
         self.editor_state = EditorState()
         self.block_parser = EditorBlockParser()
         self._syncing = False  # Flag to prevent infinite sync loops
+        self._plugin_code_listeners = []  # [(panel, method_name), …]
         
         self._setup_menu()
         self._setup_ui()
         self._setup_bindings()
+        self._load_extra_plugins()  # Auto-discover additional plugins
         
         # Load default file if it exists
         default_file = os.path.join(os.path.dirname(__file__), "Main.pytml")
@@ -174,18 +176,18 @@ class PyTMLEditor:
         self.mode_notebook.bind('<<NotebookTabChanged>>', self._on_tab_change)
         
         # === RIGHT PANEL: Properties + Variables ===
-        right_frame = ttk.Frame(self.main_paned)
-        self.main_paned.add(right_frame, weight=1)
+        self._right_frame = ttk.Frame(self.main_paned)
+        self.main_paned.add(self._right_frame, weight=1)
         
         # Properties panel
-        self.properties_frame = ttk.LabelFrame(right_frame, text="⚙️ Properties")
+        self.properties_frame = ttk.LabelFrame(self._right_frame, text="⚙️ Properties")
         self.properties_frame.pack(fill=tk.BOTH, expand=True)
         
         self.properties_panel = PropertiesPanel(self.properties_frame, on_property_change=self._on_property_change)
         self.properties_panel.pack(fill=tk.BOTH, expand=True)
         
         # Variables panel
-        var_frame = ttk.LabelFrame(right_frame, text="📊 Variables")
+        var_frame = ttk.LabelFrame(self._right_frame, text="📊 Variables")
         var_frame.pack(fill=tk.X, pady=(10, 0))
         
         self.var_tree = ttk.Treeview(var_frame, columns=('Value',), height=6)
@@ -196,7 +198,7 @@ class PyTMLEditor:
         self.var_tree.pack(fill=tk.X, pady=5, padx=5)
         
         # Button frame
-        btn_frame = ttk.Frame(right_frame)
+        btn_frame = ttk.Frame(self._right_frame)
         btn_frame.pack(fill=tk.X, pady=5, padx=5)
         
         ttk.Button(btn_frame, text="▶ Run (F5)", command=self.run_code).pack(side=tk.LEFT, padx=2)
@@ -252,6 +254,13 @@ class PyTMLEditor:
             # Only sync the currently visible tab to avoid unnecessary work
             if current_tab == 1:  # GUI Editor
                 self.gui_editor.load_from_code(current_code)
+            
+            # Notify all auto-discovered code listeners (e.g. LintFix)
+            for panel, method_name in self._plugin_code_listeners:
+                try:
+                    getattr(panel, method_name)(current_code)
+                except Exception:
+                    pass
         finally:
             self._syncing = False
     
@@ -264,6 +273,13 @@ class PyTMLEditor:
         try:
             current_code = self.editor.get('1.0', tk.END)
             self.gui_editor.load_from_code(current_code)
+            
+            # Notify all auto-discovered code listeners (e.g. LintFix)
+            for panel, method_name in self._plugin_code_listeners:
+                try:
+                    getattr(panel, method_name)(current_code)
+                except Exception:
+                    pass
         finally:
             self._syncing = False
     
@@ -385,6 +401,155 @@ class PyTMLEditor:
     def _open_lib_editor(self):
         """Open the Library Editor window"""
         open_lib_editor(self.root)
+    
+    # ------------------------------------------------------------------ #
+    # Plugin auto-discovery                                                #
+    # ------------------------------------------------------------------ #
+
+    def _make_editor_callback(self):
+        """Return a callback that applies new code back into the code editor.
+        Passed as ``editor_callback`` to auto-discovered panels (e.g. LintFix)."""
+        def _apply(new_code):
+            if self._syncing:
+                return
+            self._syncing = True
+            try:
+                cursor_pos = self.editor.index(tk.INSERT)
+                self.editor.delete('1.0', tk.END)
+                self.editor.insert('1.0', new_code)
+                try:
+                    self.editor.mark_set(tk.INSERT, cursor_pos)
+                    self.editor.see(tk.INSERT)
+                except Exception:
+                    pass
+                self.status_var.set("✅ Quick fix applied")
+            finally:
+                self._syncing = False
+        return _apply
+
+    def _load_extra_plugins(self):
+        """Auto-discover plugins in the plugins/ folder and load any that are
+        not already hardcoded into the editor UI."""
+        import importlib.util as _ilu
+        import glob as _glob
+
+        # Names that are already hardcoded – skip them
+        already_loaded = {'Objects', 'Properties', 'GUIEdit', 'References', 'LibEditor', 'Visual'}
+
+        plugins_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugins')
+        plugin_files = sorted(_glob.glob(os.path.join(plugins_dir, '*.py')))
+
+        for filepath in plugin_files:
+            fname = os.path.basename(filepath)
+            if fname.startswith('_'):
+                continue
+
+            module_name = fname[:-3]
+
+            try:
+                spec = _ilu.spec_from_file_location(module_name, filepath)
+                mod = _ilu.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+
+                if not hasattr(mod, 'get_plugin_info'):
+                    continue
+
+                info = mod.get_plugin_info()
+                plugin_name = info.get('name', module_name)
+
+                if plugin_name in already_loaded:
+                    continue
+
+                panel_class = info.get('panel_class')
+                panel_type  = info.get('panel_type', '')
+                panel_name  = info.get('panel_name', plugin_name)
+                panel_icon  = info.get('panel_icon', '')
+                callbacks   = info.get('callbacks', {})
+                menu_items  = info.get('menu_items', [])
+
+                if panel_class is None or panel_type not in ('center_tab', 'right'):
+                    continue
+
+                # Determine the actual parent widget
+                if panel_type == 'center_tab':
+                    parent_widget = self.mode_notebook
+                else:  # right – wrap in a labelled section
+                    label = f"{panel_icon} {panel_name}".strip()
+                    parent_widget = ttk.LabelFrame(self._right_frame, text=label)
+                    parent_widget.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+
+                # Instantiate the panel – try with editor_callback first,
+                # then without (panels that don't accept it)
+                try:
+                    panel = panel_class(
+                        parent_widget,
+                        editor_callback=self._make_editor_callback(),
+                    )
+                except TypeError:
+                    try:
+                        panel = panel_class(parent_widget)
+                    except Exception as exc:
+                        print(f"Plugin {plugin_name}: could not instantiate – {exc}")
+                        continue
+
+                panel.pack(fill=tk.BOTH, expand=True)
+
+                # For center tabs, also register with notebook
+                if panel_type == 'center_tab':
+                    tab_label = f"{panel_icon} {panel_name}".strip()
+                    self.mode_notebook.add(panel, text=tab_label)
+
+                # Register code-change listener if declared
+                code_change_key = callbacks.get('on_code_change')
+                if code_change_key and hasattr(panel, code_change_key):
+                    self._plugin_code_listeners.append((panel, code_change_key))
+
+                # Add menu items
+                for item in menu_items:
+                    self._add_plugin_menu_item(info, item, panel)
+
+                self.status_var.set(f"Plugin loaded: {plugin_name}")
+
+            except Exception as exc:
+                print(f"_load_extra_plugins: skipped {fname} – {exc}")
+
+    def _add_plugin_menu_item(self, plugin_info, item, panel):
+        """Add a menu item for a dynamically loaded plugin."""
+        menu_name = item.get('menu', 'View')
+        label     = item.get('label', plugin_info.get('name', ''))
+
+        # Find or create the target menu
+        menubar = self.root.nametowidget(self.root.cget('menu'))
+        target_menu = None
+        for i in range(menubar.index('end') + 1):
+            try:
+                if menubar.entrycget(i, 'label') == menu_name:
+                    target_menu = menubar.nametowidget(menubar.entrycget(i, 'menu'))
+                    break
+            except Exception:
+                continue
+
+        if target_menu is None:
+            return  # Don't create new menus dynamically
+
+        # The command cycles through known panel_type actions
+        cmd = item.get('command', '')
+        if cmd == 'toggle':
+            def _toggle(p=panel):
+                if p.winfo_viewable():
+                    p.pack_forget()
+                else:
+                    p.pack(fill=tk.BOTH, expand=True)
+            target_menu.add_command(label=label, command=_toggle)
+        elif cmd == 'select_tab':
+            def _select(p=panel, nb=self.mode_notebook):
+                for idx in range(nb.index('end')):
+                    if nb.nametowidget(nb.tabs()[idx]) is p:
+                        nb.select(idx)
+                        break
+            target_menu.add_command(label=label, command=_select)
+
+    # ------------------------------------------------------------------ #
     
     def _on_tab_change(self, event):
         """Handle tab switch - sync the target tab from code"""

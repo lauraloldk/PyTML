@@ -96,31 +96,39 @@ class GUINodeRegistry:
             spec.loader.exec_module(module)
             
             if hasattr(module, 'get_gui_info'):
-                gui_info = module.get_gui_info()
-                category = gui_info.get('category', module_name)
-                gui_info['_module'] = module_name
-                gui_info['_source'] = filepath
-                self.nodes[category] = gui_info
+                gui_info_result = module.get_gui_info()
                 
-                element_type = gui_info.get('type', 'widget')
-                framework = gui_info.get('framework', 'tkinter')
-                
-                if element_type == 'container':
-                    self.containers.append(gui_info)
-                    self._categories['Containers'].append(gui_info)
-                elif element_type == 'widget':
-                    self.widgets.append(gui_info)
-                    self._categories['Widgets'].append(gui_info)
-                elif element_type == 'graphic' or framework == 'canvas':
-                    self.graphics.append(gui_info)
-                    self._categories['Graphics'].append(gui_info)
-                elif element_type == 'surface' or framework in ('pygame', 'sdl', 'opengl'):
-                    self.surfaces.append(gui_info)
-                    self._categories['Surfaces'].append(gui_info)
+                # get_gui_info() may return a single dict OR a list of dicts
+                if isinstance(gui_info_result, list):
+                    items = gui_info_result
                 else:
-                    # Default to widgets
-                    self.widgets.append(gui_info)
-                    self._categories['Widgets'].append(gui_info)
+                    items = [gui_info_result]
+                
+                for gui_info in items:
+                    category = gui_info.get('category', module_name)
+                    gui_info['_module'] = module_name
+                    gui_info['_source'] = filepath
+                    self.nodes[category] = gui_info
+                    
+                    element_type = gui_info.get('type', 'widget')
+                    framework = gui_info.get('framework', 'tkinter')
+                    
+                    if element_type == 'container':
+                        self.containers.append(gui_info)
+                        self._categories['Containers'].append(gui_info)
+                    elif element_type == 'widget':
+                        self.widgets.append(gui_info)
+                        self._categories['Widgets'].append(gui_info)
+                    elif element_type == 'graphic' or framework == 'canvas':
+                        self.graphics.append(gui_info)
+                        self._categories['Graphics'].append(gui_info)
+                    elif element_type == 'surface' or framework in ('pygame', 'sdl', 'opengl'):
+                        self.surfaces.append(gui_info)
+                        self._categories['Surfaces'].append(gui_info)
+                    else:
+                        # Default to widgets
+                        self.widgets.append(gui_info)
+                        self._categories['Widgets'].append(gui_info)
                     
         except Exception as e:
             print(f"GUINodeRegistry: Could not load {filepath}: {e}")
