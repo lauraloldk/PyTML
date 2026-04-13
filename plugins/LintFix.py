@@ -79,6 +79,13 @@ _TAGS_NEED_PARENT = {'button', 'label', 'entry', 'vbox', 'hbox'}
 # Closing tags that must not be checked as opening tags
 _CLOSE_TAGS = {'if', 'loop', 'forever', 'block'}
 
+# Colour mapping for issue severities (used by LintIssue.icon and LintPanel)
+_SEVERITY_COLORS = {
+    LintIssue.SEVERITY_ERROR:   '#f44747',
+    LintIssue.SEVERITY_WARNING: '#ce9178',
+    LintIssue.SEVERITY_INFO:    '#9cdcfe',
+}
+
 
 def _discover_known_tags():
     """
@@ -167,6 +174,8 @@ class LintChecker:
 
             # ── Check 1: Unknown tag ──────────────────────────────────
             known = self._get_known_tags()
+            # Skip tags containing underscore – those are element action patterns
+            # like <btn1_click> which are not structural tags in the registry.
             if tag_name not in known and '_' not in tag_name:
                 issues.append(LintIssue(
                     i,
@@ -179,8 +188,7 @@ class LintChecker:
                 name_val = self._get_attr(attrs_str, 'name')
                 if name_val is None:
                     auto_name = f"{tag_name}_{i}"
-                    def _fix_add_name(code, _line=i, _tag=tag_name, _aname=auto_name,
-                                      _raw=raw_line):
+                    def _fix_add_name(code, _line=i, _aname=auto_name):
                         return _inject_attr(code, _line, 'name', _aname)
                     issues.append(LintIssue(
                         i,
@@ -266,15 +274,20 @@ def _inject_attr(code, line_no, attr, value):
     Inject ``attr="value"`` into the tag on *line_no* (1-based), just
     before the closing ``>``.
     """
-    lines = code.split('\n')
+    # splitlines(True) preserves original line endings (\n or \r\n)
+    lines = code.splitlines(True)
     idx = line_no - 1
     if 0 <= idx < len(lines):
         line = lines[idx]
-        # Insert before the last >
-        pos = line.rfind('>')
+        # Insert before the last >; keep the original line ending
+        eol = ''
+        stripped = line.rstrip('\r\n')
+        if len(line) > len(stripped):
+            eol = line[len(stripped):]
+        pos = stripped.rfind('>')
         if pos != -1:
-            lines[idx] = line[:pos] + f' {attr}="{value}"' + line[pos:]
-    return '\n'.join(lines)
+            lines[idx] = stripped[:pos] + f' {attr}="{value}"' + stripped[pos:] + eol
+    return ''.join(lines)
 
 
 def _wrap_in_gui(code, hint_line_no):
@@ -284,7 +297,9 @@ def _wrap_in_gui(code, hint_line_no):
     after the first / last GUI tag run.
     """
     gui_tags = {'window', 'button', 'label', 'entry', 'vbox', 'hbox'}
-    lines = code.split('\n')
+    # Detect line separator used in the file
+    sep = '\r\n' if '\r\n' in code else '\n'
+    lines = code.splitlines()
     inside = False
     first_idx = None
     last_idx  = None
@@ -308,7 +323,7 @@ def _wrap_in_gui(code, hint_line_no):
 
     lines.insert(last_idx + 1, '</gui>')
     lines.insert(first_idx, '<gui>')
-    return '\n'.join(lines)
+    return sep.join(lines)
 
 
 # ======================================================================= #
@@ -409,8 +424,7 @@ class LintPanel(ttk.Frame):
         for issue in self._issues:
             label = f"{issue.icon()}  L{issue.line_no}: {issue.message}"
             self._listbox.insert(tk.END, label)
-            color = {'error': '#f44747', 'warning': '#ce9178',
-                     'info': '#9cdcfe'}.get(issue.severity, '#d4d4d4')
+            color = _SEVERITY_COLORS.get(issue.severity, '#d4d4d4')
             self._listbox.itemconfig(tk.END, fg=color)
 
         n = len(self._issues)

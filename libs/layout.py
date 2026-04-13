@@ -191,9 +191,9 @@ class _LayoutBoxNode(ActionNode):
         context['windows'].windows[name] = box
 
         # Create the physical frame inside the parent window
-        if parent_name:
+        if parent_name and parent_name != name:
             parent_window = context['windows'].get(parent_name)
-            if parent_window and parent_window is not box:
+            if parent_window:
                 box.create(parent_window, x, y, width, height)
 
         self._ready = True
