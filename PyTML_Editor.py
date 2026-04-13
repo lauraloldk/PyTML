@@ -6,6 +6,8 @@ Plugins are loaded dynamically from the plugins/ folder
 
 import tkinter as tk
 from tkinter import ttk, scrolledtext, filedialog, messagebox
+import glob
+import importlib.util
 import os
 import sys
 
@@ -430,14 +432,11 @@ class PyTMLEditor:
     def _load_extra_plugins(self):
         """Auto-discover plugins in the plugins/ folder and load any that are
         not already hardcoded into the editor UI."""
-        import importlib.util as _ilu
-        import glob as _glob
-
         # Names that are already hardcoded – skip them
         already_loaded = {'Objects', 'Properties', 'GUIEdit', 'References', 'LibEditor', 'Visual'}
 
         plugins_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plugins')
-        plugin_files = sorted(_glob.glob(os.path.join(plugins_dir, '*.py')))
+        plugin_files = sorted(glob.glob(os.path.join(plugins_dir, '*.py')))
 
         for filepath in plugin_files:
             fname = os.path.basename(filepath)
@@ -447,8 +446,8 @@ class PyTMLEditor:
             module_name = fname[:-3]
 
             try:
-                spec = _ilu.spec_from_file_location(module_name, filepath)
-                mod = _ilu.module_from_spec(spec)
+                spec = importlib.util.spec_from_file_location(module_name, filepath)
+                mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(mod)
 
                 if not hasattr(mod, 'get_plugin_info'):

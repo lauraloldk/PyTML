@@ -79,6 +79,9 @@ _TAGS_NEED_PARENT = {'button', 'label', 'entry', 'vbox', 'hbox'}
 # Closing tags that must not be checked as opening tags
 _CLOSE_TAGS = {'if', 'loop', 'forever', 'block'}
 
+# GUI element tags that must live inside a <gui>…</gui> block
+_GUI_ELEMENT_TAGS = {'window', 'button', 'label', 'entry', 'vbox', 'hbox'}
+
 # Colour mapping for issue severities (used by LintIssue.icon and LintPanel)
 _SEVERITY_COLORS = {
     LintIssue.SEVERITY_ERROR:   '#f44747',
@@ -226,8 +229,7 @@ class LintChecker:
                     ))
 
             # ── Check 3: GUI tags outside <gui> block ─────────────────
-            gui_tags = {'window', 'button', 'label', 'entry', 'vbox', 'hbox'}
-            if tag_name in gui_tags and not inside_gui:
+            if tag_name in _GUI_ELEMENT_TAGS and not inside_gui:
                 def _fix_wrap_gui(code, _line=i):
                     return _wrap_in_gui(code, _line)
                 issues.append(LintIssue(
@@ -296,7 +298,7 @@ def _wrap_in_gui(code, hint_line_no):
     with ``<gui>`` / ``</gui>``.  Inserts tags on lines immediately before /
     after the first / last GUI tag run.
     """
-    gui_tags = {'window', 'button', 'label', 'entry', 'vbox', 'hbox'}
+    gui_tags = _GUI_ELEMENT_TAGS
     # Detect line separator used in the file
     sep = '\r\n' if '\r\n' in code else '\n'
     lines = code.splitlines()
@@ -338,7 +340,7 @@ class LintPanel(ttk.Frame):
     Receives code changes via ``notify_code_change(code)``.
     """
 
-    def __init__(self, parent, editor_callback=None, on_code_change=None):
+    def __init__(self, parent, editor_callback=None):
         super().__init__(parent)
         self.editor_callback = editor_callback
         self._checker = LintChecker()
