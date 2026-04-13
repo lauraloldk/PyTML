@@ -18,34 +18,7 @@ from tkinter import ttk
 
 # Import resolve_value for variabel-interpolation
 from libs.var import resolve_value, resolve_attributes, resolve_as_string
-
-
-class ActionNode:
-    """Base klasse for actions - importeret her for at undgå circular imports"""
-    
-    def __init__(self, tag_name, attributes=None):
-        self.tag_name = tag_name
-        self.attributes = attributes or {}
-        self.children = []
-        self.parent = None
-        self._ready = False
-        self._executed = False
-        self._backgroundcolor = None
-    
-    def add_child(self, child):
-        child.parent = self
-        self.children.append(child)
-        return child
-    
-    def children_ready(self):
-        return all(child.is_ready() for child in self.children)
-    
-    def is_ready(self):
-        return self._ready and self.children_ready()
-    
-    def execute(self, context):
-        self._ready = True
-        self._executed = True
+from libs.core import ActionNode
 
 
 class Window:

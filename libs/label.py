@@ -16,37 +16,11 @@ from tkinter import ttk
 
 # Import resolve_value for variabel-interpolation
 from libs.var import resolve_value, resolve_attributes, resolve_as_string
+from libs.core import ActionNode
 
 
 # Marker som GUI Node type
 GUI_NODE_TYPE = "widget"
-
-
-class ActionNode:
-    """Base klasse for actions"""
-    
-    def __init__(self, tag_name, attributes=None):
-        self.tag_name = tag_name
-        self.attributes = attributes or {}
-        self.children = []
-        self.parent = None
-        self._ready = False
-        self._executed = False
-    
-    def add_child(self, child):
-        child.parent = self
-        self.children.append(child)
-        return child
-    
-    def children_ready(self):
-        return all(child.is_ready() for child in self.children)
-    
-    def is_ready(self):
-        return self._ready and self.children_ready()
-    
-    def execute(self, context):
-        self._ready = True
-        self._executed = True
 
 
 class Label:
@@ -74,7 +48,14 @@ class Label:
         tk_win = parent_window.get_tk_window()
         if tk_win:
             self._tk_label = tk.Label(tk_win, text=self.text)
-            self._tk_label.place(x=self.x, y=self.y, width=self.width, height=self.height)
+            if getattr(parent_window, 'is_layout_container', False):
+                pack_side = getattr(parent_window, 'pack_side', 'top')
+                pack_fill = getattr(parent_window, 'pack_fill', 'x')
+                spacing = getattr(parent_window, 'spacing', 2)
+                self._tk_label.pack(side=pack_side, fill=pack_fill,
+                                    padx=spacing, pady=spacing)
+            else:
+                self._tk_label.place(x=self.x, y=self.y, width=self.width, height=self.height)
         self._ready = True
         return self
     

@@ -8,32 +8,7 @@ Syntax:
     <var name="x" value=<input>>    -> Gem input i variabel
 """
 
-
-class ActionNode:
-    """Base klasse for actions"""
-    
-    def __init__(self, tag_name, attributes=None):
-        self.tag_name = tag_name
-        self.attributes = attributes or {}
-        self.children = []
-        self.parent = None
-        self._ready = False
-        self._executed = False
-    
-    def add_child(self, child):
-        child.parent = self
-        self.children.append(child)
-        return child
-    
-    def children_ready(self):
-        return all(child.is_ready() for child in self.children)
-    
-    def is_ready(self):
-        return self._ready and self.children_ready()
-    
-    def execute(self, context):
-        self._ready = True
-        self._executed = True
+from libs.core import ActionNode
 
 
 class InputNode(ActionNode):
